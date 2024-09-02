@@ -11,37 +11,57 @@ import re
 import numpy as np
 import matplotlib.pyplot as plt
 import AtlasFunction as af
+import scipy.signal as signal
+from scipy import stats
+
 
 input_format_df = {
     'sync_tag':'sync',
+    'track_tag': 'tracking',
     'bonsai_folder_tag':'Bonsai',
     'atlas_folder_tag':'Atlas_Trial',
     'atlas_parent_folder_tag':'Atlas',
     'key_suffix':'.docx',
     'atlas_z_filename':'Zscore_trace.csv',
+    'atlas_green_filename':'Green_trace.csv',
     'cold_folder_tag':'Cold_folder',
     'day_tag': 'Day',
-    'key_ignore_time':120
+    'key_ignore_time':120,
+    'atlas_frame_rate': 840,
+    'bonsai_frame_rate': 24,
+    'atlas_recording_time':30,    
+    'before_win': 1,
+    'after_win': 1,
+    'low_pass_filter_frequency': 100,
+    'parent_folder': '//cmvm.datastore.ed.ac.uk/cmvm/sbms/users/s2764793/Win7/Desktop/workingfolder/Group D/1819287/',
+    'output_folder': 'SingleTrailPlot'
     }
 
 pfw = None
 
 class key_trail:
-    def __init__(self,cold,sync,atlas):
+    def __init__(self,cold,sync,track,atlas,green,day,trail_ID,input_format_df):
+        self.trail_ID = trail_ID
+        self.day = day
         self.cold = cold
         self.sync = sync
+        self.track = track
         self.atlas = atlas
-        self.Synchronisation()
+        self.green = green
+        self.Synchronisation(input_format_df)
         self.smoothed_atlas = pd.DataFrame(af.smooth_signal(self.atlas[0],window_len=10),columns=[0])
-        self.PlotSingleTrail()
+        self.output_path = os.path.join(input_format_df['parent_folder'],input_format_df['output_folder'])
+        if not os.path.exists(self.output_path):
+            os.makedirs(self.output_path)
+        self.PlotSingleTrail(input_format_df)
+        self.PlotRewardCollection(input_format_df)
+        self.CalculateInstantSpeed(input_format_df)
         
-    def Synchronisation (self):
+    def Synchronisation (self,input_format_df):
         for i in range (len(self.sync)):
             if np.isnan(self.sync['Value.X'].iloc[i]) and np.isnan(self.sync['Value.Y'].iloc[i]):
                 self.startframe_sync = i
-                self.startframe_atlas = i*35
-                self.starttime_sync = i/24
-                print(self.startframe_sync)
+                self.starttime_sync = i/input_format_df['bonsai_frame_rate']
                 break
         global pfw
         w1t = self.cold.loc[0,'well1time_s']
@@ -66,37 +86,137 @@ class key_trail:
         else:
             self.lpfw_leave = np.nan
         return
-            
-    def PlotSingleTrail(self):
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.plot(self.smoothed_atlas.index/840,self.smoothed_atlas[0])
+    
+    def CalculateInstantSpeed (self,input_format_df):
+        path = os.path.join(input_format_df['parent_folder'],'speed_files')
+        path = os.path.join(path,'Day'+str(self.day))
+        if not os.path.exists(path):
+            os.makedirs(path)
+        raw_atlas = []
+        fil_atlas = []
+        raw_green = []
+        fil_green = []
+        speed = []
+        self.filtered_green = LowPassFilter(self.green, input_format_df)
+        if (self.sync.shape[0]<self.startframe_sync+int(input_format_df['atlas_recording_time']*input_format_df['bonsai_frame_rate'])-1):
+            print('Bonsai recording does not fully cover atlas recording:')
+            print('Day'+str(self.day)+' trail'+str(self.trail_ID))
+            return
+        for i in range (0,int(input_format_df['atlas_recording_time']*input_format_df['bonsai_frame_rate'])):
+            x = self.track['X'][i+self.startframe_sync]
+            y = self.track['Y'][i+self.startframe_sync]
+            v = np.sqrt(pow(x,2)+pow(y,2))
+            for j in range (0,int(input_format_df['atlas_frame_rate']/input_format_df['bonsai_frame_rate'])):
+                atlas_frame = int(i/input_format_df['bonsai_frame_rate']*input_format_df['atlas_frame_rate']+j)
+                speed.append(v)
+                raw_atlas.append(self.atlas[0][atlas_frame])
+                fil_atlas.append(self.filtered_atlas[atlas_frame][0])
+                raw_green.append(self.atlas[0][atlas_frame])
+                fil_green.append(self.filtered_green[atlas_frame][0])
+
+        data = {
+            'raw_z_score':raw_atlas,
+            'raw_green':raw_green,
+            'filtered_z_score':fil_atlas,
+            'filtered_green':fil_green,
+            'instant_speed':speed
+            }
+        GAS = pd.DataFrame(data)
+        GAS.to_csv(os.path.join(path,'Green&Speed_Day'+str(self.day)+'-'+str(self.trail_ID)+'.csv'),index = False)
+        return
+      
+    def PlotSingleTrail(self,input_format_df):
+        title1 = 'Day'+str(self.day)+'_trail'+str(self.trail_ID)
+        fig1, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(self.smoothed_atlas.index/input_format_df['atlas_frame_rate'],self.smoothed_atlas[0])
         ax.set_title(self.cold.loc[0,'name'])
         if not (np.isnan(self.pfw_enter)):
             if (self.pfw_enter+self.starttime_cold-self.starttime_sync < 30):
                 ax.axvline(x=self.pfw_enter+self.starttime_cold-self.starttime_sync, color='r', linestyle='--', label='preferred_well_enter_time')
+                ax.legend(loc='upper right')
             if (self.pfw_leave+self.starttime_cold-self.starttime_sync < 30):
                 ax.axvline(x=self.pfw_leave+self.starttime_cold-self.starttime_sync, color='g', linestyle='--', label='preferred_well_leave_time')
+                ax.legend(loc='upper right')
         if not (np.isnan(self.pfw_enter)):
             if (self.lpfw_enter+self.starttime_cold-self.starttime_sync < 30):
                 ax.axvline(x=self.lpfw_enter+self.starttime_cold-self.starttime_sync, color='b', linestyle='--', label='less_preferred_well_enter_time')
+                ax.legend(loc='upper right')
             if (self.lpfw_leave+self.starttime_cold-self.starttime_sync < 30):
                 ax.axvline(x=self.lpfw_leave+self.starttime_cold-self.starttime_sync, color='purple', linestyle='--', label='less_preferred_well_leave_time')
-        ax.legend(loc='upper right')
-        fig.show()
-        
+                ax.legend(loc='upper right')
+        ax.set_xlabel('time/s')
+        ax.set_ylabel('z-score')
+        fig1.savefig(os.path.join(self.output_path,title1+'.png'))
+        plt.close(fig1)
         return
-                
-
-class cold_file:
-    def __init__ (self,cold_folder,sync_folder,atlas_folder,input_format_df,day):
+           
+    def PlotRewardCollection(self,input_format_df):
+        self.filtered_atlas = LowPassFilter(self.atlas, input_format_df)
+        self.cropped_filtered_atlas = None
+        self.cropped_filtered_atlas_lpfw = None
+        if not (np.isnan(self.pfw_enter)):
+           pfw_enter_adj = self.pfw_enter+self.starttime_cold-self.starttime_sync
+           
+           #find out whether the collection is fully recorded or not
+           if (pfw_enter_adj<(30-input_format_df['after_win'])) and (pfw_enter_adj>input_format_df['before_win']):
+               title1 = 'Day'+str(self.day)+'_trail'+str(self.trail_ID)
+               fig1, ax = plt.subplots(figsize=(10, 5))
+               before_frame = int((pfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate'])
+               after_frame = int((pfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
+               self.cropped_filtered_atlas = self.filtered_atlas[before_frame:after_frame]
+               ax.plot(np.arange(0,len(self.cropped_filtered_atlas))/input_format_df['atlas_frame_rate']-input_format_df['before_win'],self.cropped_filtered_atlas,color='purple')
+               ax.axvline(x=0,color='r', linestyle='--', label='reward collection at preferred well')
+               ax.set_title(self.cold.loc[0,'name'])
+               ax.set_xlabel('time/s')
+               ax.set_ylabel('z-score')
+               ax.legend(loc='upper right')
+               fig1.savefig(os.path.join(self.output_path,title1+'_pfw.png'))
+               plt.close(fig1)
+               
+               #the low band pass filter may accidentally change the length of array a bit
+               target_len = (input_format_df['before_win']+input_format_df['after_win'])*input_format_df['atlas_frame_rate']
+               if len(self.cropped_filtered_atlas)>target_len:
+                   self.cropped_filtered_atlas = self.cropped_filtered_atlas[:target_len]
+               elif len(self.cropped_filtered_atlas)>target_len:
+                   while(len(self.cropped_filtered_atlas)<target_len):
+                       self.cropped_filtered_atlas = np.append(self.cropped_filtered_atlas,self.cropped_filtered_atlas[-1])
         
+        if not (np.isnan(self.lpfw_enter)):
+           lpfw_enter_adj = self.lpfw_enter+self.starttime_cold-self.starttime_sync
+           #find out whether the collection is fully recorded or not
+           if (lpfw_enter_adj<(30-input_format_df['after_win'])) and (lpfw_enter_adj>input_format_df['before_win']):
+               title1 = 'Day'+str(self.day)+'_trail'+str(self.trail_ID)
+               fig1, ax = plt.subplots(figsize=(10, 5))
+               before_frame = int((lpfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate'])
+               after_frame = int((lpfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
+               self.cropped_filtered_atlas_lpfw = self.filtered_atlas[before_frame:after_frame]
+               ax.plot(np.arange(0,len(self.cropped_filtered_atlas_lpfw))/input_format_df['atlas_frame_rate']-input_format_df['before_win'],self.cropped_filtered_atlas_lpfw,color='green')
+               ax.axvline(x=0,color='r', linestyle='--', label='reward collection at less preferred well')
+               ax.set_title(self.cold.loc[0,'name'])
+               ax.set_xlabel('time/s')
+               ax.set_ylabel('z-score')
+               ax.legend(loc='upper right')
+               fig1.savefig(os.path.join(self.output_path,title1+'_lpfw.png'))
+               plt.close(fig1)
+               
+               #the low band pass filter may accidentally change the length of array a bit
+               target_len = (input_format_df['before_win']+input_format_df['after_win'])*input_format_df['atlas_frame_rate']
+               if len(self.cropped_filtered_atlas_lpfw)>target_len:
+                   self.cropped_filtered_atlas_lpfw = self.cropped_filtered_atlas_lpfw[:target_len]
+               elif len(self.cropped_filtered_atlas_lpfw)>target_len:
+                   while(len(self.cropped_filtered_atlas_lpfw)<target_len):
+                       self.cropped_filtered_atlas_lpfw = np.append(self.cropped_filtered_atlas_lpfw,self.cropped_filtered_atlas_lpfw[-1])
+        return
+               
+class cold_file:
+    def __init__ (self,cold_folder,bonsai_folder,atlas_folder,input_format_df,day):
         self.day = day
         for filename in os.listdir(cold_folder):
             cold_day = int(re.findall(r'\d+', filename.split(input_format_df['day_tag'])[1])[0])
             if cold_day == self.day:
                 self.df = pd.read_excel(os.path.join(cold_folder,filename))
                 break
-        for filename in os.listdir(sync_folder):
+        for filename in os.listdir(bonsai_folder):
             #in this case I write down trails with an Atlas recording as the filename of an empty docx document
             if filename.endswith(input_format_df['key_suffix']):
                 self.key_index = re.findall(r'\d+', filename)[0]
@@ -115,30 +235,64 @@ class cold_file:
             else:
                 current_index *= 10
         
-        # self.keydf = pd.DataFrame()
-        # for i in  self.keynum:
-        #     self.keydf = pd.concat([self.keydf, self.df.iloc[[i]]], ignore_index=True)
-        # print(self.keydf)
-        
         self.key_trails = []
         for index, i in enumerate(self.keynum):
-            for filename in os.listdir(sync_folder):
+            for filename in os.listdir(bonsai_folder):
                 if input_format_df['sync_tag'] in filename:
                     ID = re.findall(r'\d+', filename.split(input_format_df['sync_tag'])[1])[0]
                     if int(ID) == i:
-                        sync_file = pd.read_csv(os.path.join(sync_folder, filename))
-                        
+                        sync_file = pd.read_csv(os.path.join(bonsai_folder, filename))
+                if input_format_df['track_tag'] in filename:
+                    ID = re.findall(r'\d+', filename.split(input_format_df['track_tag'])[1])[0]
+                    if int(ID) == i:
+                        track_file = pd.read_csv(os.path.join(bonsai_folder, filename))       
+            
             for foldername in os.listdir(atlas_folder):
-                
                 if input_format_df['atlas_folder_tag'] in foldername:
                     ID = re.findall(r'\d+', foldername.split(input_format_df['atlas_folder_tag'])[1])[0]
-                    print(foldername,ID,index)
                     if int(ID) == index+1:
                         folder_path = os.path.join(atlas_folder, foldername)
                         atlas_file = pd.read_csv(os.path.join(folder_path, input_format_df['atlas_z_filename']),header=None)
+                        green_file = pd.read_csv(os.path.join(folder_path, input_format_df['atlas_z_filename']),header=None)
             
-            self.key_trails.append(key_trail(self.df.iloc[[i]].reset_index(drop=True), sync_file, atlas_file))
-
+            self.key_trails.append(key_trail(self.df.iloc[[i]].reset_index(drop=True), sync_file,track_file,atlas_file,green_file,self.day,i,input_format_df))
+        self.IntegrateAtlas(input_format_df)
+            
+    def IntegrateAtlas(self,input_format_df):
+        target_len = (input_format_df['before_win']+input_format_df['after_win'])*input_format_df['atlas_frame_rate']
+        self.filtered_atlas_day = np.empty((target_len, 0))
+        
+        for i in self.key_trails:
+            if i.cropped_filtered_atlas is not None:
+                self.filtered_atlas_day = np.concatenate((self.filtered_atlas_day, i.cropped_filtered_atlas), axis=1)
+            if i.cropped_filtered_atlas_lpfw is not None:
+                self.filtered_atlas_day = np.concatenate((self.filtered_atlas_day, i.cropped_filtered_atlas_lpfw), axis=1)
+        mean = []
+        CI = []
+        for i in range (self.filtered_atlas_day.shape[0]):
+            mean.append(self.filtered_atlas_day[i,:].mean())
+            std = np.std(self.filtered_atlas_day[i,:])
+            n = self.filtered_atlas_day.shape[1]
+            t_value = stats.t.ppf(0.975, df=n-1)
+            CI.append(t_value*std/np.sqrt(n))
+        fig,ax = plt.subplots(figsize=(10, 5))
+        time = np.arange(0,target_len)/input_format_df['atlas_frame_rate']-input_format_df['before_win']
+        ax.plot(time, mean, color='blue', label='Mean Signal')
+        CI = np.array(CI)
+        mean = np.array(mean)
+        ax.axvline(x=0,color='r', linestyle='--', label='reward collection')
+        ax.fill_between(time, mean-CI, mean+CI, color='blue', alpha=0.2, label='95% CI')
+        ax.set_xlabel('time/s')
+        ax.set_ylabel('z-score')
+        ax.set_title('Day'+str(self.day)+' average PETH')
+        output_path = os.path.join(input_format_df['parent_folder'],'PETH')
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+        output_path = os.path.join(output_path,'Day'+str(self.day)+'_avg_PETH.png')
+        fig.savefig(output_path)
+        
+        return
+    
 def ObtainDayMax (input_format_df, parent_folder):
     day_max = -1
     for filename in os.listdir(parent_folder):
@@ -149,6 +303,22 @@ def ObtainDayMax (input_format_df, parent_folder):
                 day_max = day
     return day_max
 
+def LowPassFilter (x,input_format_df):
+    # Sampling frequency (in Hz)
+    fs = input_format_df['atlas_frame_rate'] 
+    cutoff = input_format_df['low_pass_filter_frequency']
+    # Normalized cutoff frequency (cutoff frequency / Nyquist frequency)
+    nyq = 0.5 * fs
+    normal_cutoff = cutoff / nyq
+    
+    # Order of the filter
+    order = 5
+    
+    # Get the filter coefficients
+    b, a = signal.butter(order, normal_cutoff, btype='low', analog=False)
+    y=signal.filtfilt(b, a, x, axis=0)
+    return y
+    
 def ObtainPreferredWell (cold_folder):
     for cold_filename in os.listdir(cold_folder):
         cold = pd.read_excel(os.path.join(cold_folder,cold_filename))
@@ -165,8 +335,9 @@ def ObtainPreferredWell (cold_folder):
         else: 
             pfw = 2
     return
-    
-def ReadInFiles (input_format_df,parent_folder):
+   
+def ReadInFiles (input_format_df):
+    parent_folder = input_format_df['parent_folder']
     day_max = ObtainDayMax(input_format_df, parent_folder)
     cold_folder = None
     files = [[None for _ in range(2)] for _ in range(day_max)]
@@ -183,15 +354,46 @@ def ReadInFiles (input_format_df,parent_folder):
     cold_files = []
     for i in range (0,day_max):
         cold_files.append(cold_file(cold_folder,files[i][0],files[i][1],input_format_df,i+1))
-    return
+    return cold_files
 
-def MainFunction (input_format_df):
+def PlotMousePETH (cold_files,input_format_df,mouse_ID):
+    target_len = (input_format_df['before_win']+input_format_df['after_win'])*input_format_df['atlas_frame_rate']
+    atlas_tot = np.empty((target_len, 0))
+    for i in cold_files:
+        if i.filtered_atlas_day.size!=0:
+            atlas_tot = np.concatenate((atlas_tot, i.filtered_atlas_day), axis=1)
+    mean = []
+    CI = []
+    for i in range (atlas_tot.shape[0]):
+        mean.append(atlas_tot[i,:].mean())
+        std = np.std(atlas_tot[i,:])
+        n = atlas_tot.shape[1]
+        t_value = stats.t.ppf(0.975, df=n-1)
+        CI.append(t_value*std/np.sqrt(n))
+    fig,ax = plt.subplots(figsize=(10, 5))
+    time = np.arange(0,target_len)/input_format_df['atlas_frame_rate']-input_format_df['before_win']
+    ax.plot(time, mean, color='blue', label='Mean Signal')
+    CI = np.array(CI)
+    mean = np.array(mean)
+    ax.fill_between(time, mean-CI, mean+CI, color='blue', alpha=0.2, label='95% CI')
+    ax.axvline(x=0,color='r', linestyle='--', label='reward collection')
+    ax.set_xlabel('time/s')
+    ax.set_ylabel('z-score')
+    ax.set_title('Mouse'+str(mouse_ID)+' average PETH')
+    output_path = os.path.join(input_format_df['parent_folder'],'PETH')
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    output_path = os.path.join(output_path,'Mouse'+str(mouse_ID)+'_avg_PETH.png')
+    fig.savefig(output_path)
+
+def MainFunction (input_format_df,mouse_ID):
+    cold_files = ReadInFiles(input_format_df)
+    PlotMousePETH (cold_files,input_format_df,mouse_ID)
     return
 
 # atlas_folder = 'E:\Mingshuai\Group D\1769568/'
 # sync_folder = '/Users/zhumingshuai/Desktop/Programming/Data/Atlas/Sample/'
 # cold_folder = '/Users/zhumingshuai/Desktop/Programming/Data/Atlas/Sample/Training_Data_Day1.xlsx'
 # a = cold_file(cold_folder,sync_folder,atlas_folder,input_format_df)
-
-parent_folder = '//cmvm.datastore.ed.ac.uk/cmvm/sbms/users/s2764793/Win7/Desktop/workingfolder/Group D/1819287/'
-ReadInFiles(input_format_df, parent_folder)
+ 
+MainFunction(input_format_df,'1819287')
