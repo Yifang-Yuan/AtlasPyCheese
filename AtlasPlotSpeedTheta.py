@@ -83,7 +83,7 @@ def plot_wavelet(ax,sst,frequency,power,Fs=10000,colorBar=False,logbase=False):
     yax.set_major_formatter(ticker.ScalarFormatter())
     if colorBar: 
         fig = plt.gcf()  # Get the current figure
-        position = fig.add_axes([0.6, -0.03, 0.2, 0.02])
+        position = fig.add_axes([0.6, -0.03, 0.3, 0.02])
         #position = fig.add_axes()
         cbar=plt.colorbar(CS, cax=position, orientation='horizontal', fraction=0.05, pad=0.5)
         cbar.set_label('Power (mV$^2$)', fontsize=12) 
@@ -92,6 +92,7 @@ def plot_wavelet(ax,sst,frequency,power,Fs=10000,colorBar=False,logbase=False):
 
 def plot_average_zscore_speed (dpath,Fs=840):
     pattern = os.path.join(dpath, 'Day*/', 'Speed_*.csv')
+    #pattern = os.path.join(dpath, 'Day*/', 'Green&Speed_*.csv')
     # Get a list of all matching files
     file_list = glob.glob(pattern)
     # Loop through the file list and read each file
@@ -107,15 +108,18 @@ def plot_average_zscore_speed (dpath,Fs=840):
     for file_path in file_list:
         try:
             df = pd.read_csv(file_path)
-            df['instant_speed'] = df['instant_speed'].mask(df['instant_speed'] > 20)
+            df['instant_speed'] = df['instant_speed'].mask(df['instant_speed'] > 16)
             df['instant_speed'].interpolate(method='nearest', inplace=True)
             df['instant_speed'].fillna(method='bfill', inplace=True)  # Fill NaNs at the beginning
             df['instant_speed'].fillna(method='ffill', inplace=True)  # Fill NaNs at the end
-            reshaped_speed = df['instant_speed'].values.reshape(1, -1)
+            df['instant_speed'][df['instant_speed'] > 10]=10
+            speed_data=df['instant_speed'].values
+            speed_data=butter_filter(speed_data, btype='low', cutoff=20, fs=Fs, order=5)
+            reshaped_speed = speed_data.reshape(1, -1)
             
             zscore_raw = df['raw_z_score'].values
             zscore_raw=notchfilter (zscore_raw,f0=100,bw=10,fs=Fs)
-            zscore_smooth=fp.smooth_signal(zscore_raw,window_len=10,window='flat')
+            zscore_smooth=fp.smooth_signal(zscore_raw,window_len=42,window='flat')
             
             reshaped_zscore = zscore_smooth.reshape(1, -1)
             zscore_bandpass = band_pass_filter(zscore_smooth, 4, 100, Fs)
@@ -163,7 +167,7 @@ def plot_average_zscore_speed (dpath,Fs=840):
             print(f"Error reading {file_path}: {e}")
     return dfs_speed,dfs_zscore,dfs_power,dfs_sst,dfs_power_ripple,dfs_sst_ripple,frequency,frequency_ripple
 #%%
-dpath='D:/CheeseboardYY/Group D/1819287/speed_files_2sec/'
+dpath='G:/CheeseboardYY/Group D/1819287/speed_files_4sec/'
 Fs=840
 dfs_speed,dfs_zscore,dfs_power,dfs_sst,dfs_power_ripple,dfs_sst_ripple,frequency,frequency_ripple=plot_average_zscore_speed (dpath,Fs)
 # Convert lists to NumPy arrays
@@ -190,12 +194,12 @@ ci95_zscore = 1.96 * sem_zscore  # 95% confidence interval
 #%%
 #plot all heatmap
 fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-heatmap = sns.heatmap(dfs_speed, cmap='magma', annot=False, cbar=False, ax=ax)
+heatmap = sns.heatmap(dfs_speed, cmap='magma', annot=False, cbar=True, ax=ax)
 ax.set_title("Heatmap of Speed Data for Trials")
 
 
 fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-heatmap = sns.heatmap(dfs_zscore, cmap='magma', annot=False, cbar=False, ax=ax)
+heatmap = sns.heatmap(dfs_zscore, cmap='magma', annot=False, cbar=True, ax=ax)
 ax.set_title("Heatmap of zscore Data for Trials")
 
 #%%
@@ -229,6 +233,9 @@ ax[2].tick_params(left=False, bottom=False)
 # Remove the frame (top and right spines)
 ax[2].spines['top'].set_visible(False)
 ax[2].spines['right'].set_visible(False)
+ax[2].spines['bottom'].set_visible(False)
+ax[2].tick_params(labelbottom=False)
+ax[2].tick_params(bottom=False)
 #plot_wavelet(ax[3], avg_sst_ripple, frequency_ripple, avg_power_ripple, Fs, colorBar=True, logbase=True)
 plot_wavelet(ax[3], avg_sst, frequency, avg_power, Fs, colorBar=True, logbase=True)
 ax[3].set_title("Average Power (Theta Band)")
