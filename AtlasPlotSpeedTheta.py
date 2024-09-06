@@ -102,6 +102,8 @@ def plot_average_zscore_speed (dpath,Fs=840):
     dfs_power_ripple=[]
     dfs_sst_ripple=[]
     dfs=[]
+    frequency=[]
+    frequency_ripple=[]
     for file_path in file_list:
         try:
             df = pd.read_csv(file_path)
@@ -111,7 +113,7 @@ def plot_average_zscore_speed (dpath,Fs=840):
             df['instant_speed'].fillna(method='ffill', inplace=True)  # Fill NaNs at the end
             reshaped_speed = df['instant_speed'].values.reshape(1, -1)
             
-            zscore_raw = -df['raw_z_score'].values
+            zscore_raw = df['raw_z_score'].values
             zscore_raw=notchfilter (zscore_raw,f0=100,bw=10,fs=Fs)
             zscore_smooth=fp.smooth_signal(zscore_raw,window_len=10,window='flat')
             
@@ -123,7 +125,7 @@ def plot_average_zscore_speed (dpath,Fs=840):
             zscore_ripple_bandpass=band_pass_filter(zscore_smooth,130,180,Fs)
             sst_ripple,frequency_ripple,power_ripple,_=Calculate_wavelet(zscore_ripple_bandpass,lowpassCutoff=180,Fs=Fs,scale=2)     
             
-            fig, ax = plt.subplots(4, 1, figsize=(12, 6),gridspec_kw={'height_ratios': [1, 1, 3,3]})
+            fig, ax = plt.subplots(4, 1, figsize=(8, 6),gridspec_kw={'height_ratios': [1, 1, 3,3]})
             heatmap =sns.heatmap(reshaped_speed, cmap='magma', annot=False, cbar=False, ax=ax[0])
             ax[0].set_title("Heatmap of Speed Data")
             ax[0].tick_params(labelbottom=False)  # Remove x-tick labels
@@ -161,7 +163,7 @@ def plot_average_zscore_speed (dpath,Fs=840):
             print(f"Error reading {file_path}: {e}")
     return dfs_speed,dfs_zscore,dfs_power,dfs_sst,dfs_power_ripple,dfs_sst_ripple,frequency,frequency_ripple
 #%%
-dpath='G:/CheeseboardYY/Group D/1819287/speed_files_1sec/'
+dpath='D:/CheeseboardYY/Group D/1819287/speed_files_2sec/'
 Fs=840
 dfs_speed,dfs_zscore,dfs_power,dfs_sst,dfs_power_ripple,dfs_sst_ripple,frequency,frequency_ripple=plot_average_zscore_speed (dpath,Fs)
 # Convert lists to NumPy arrays
@@ -184,8 +186,21 @@ reshaped_avg_zscore = avg_zscore.reshape(1, -1)
 
 sem_zscore = np.std(dfs_zscore, axis=0) / np.sqrt(dfs_zscore.shape[0])  # SEM
 ci95_zscore = 1.96 * sem_zscore  # 95% confidence interval
+
+#%%
+#plot all heatmap
+fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+heatmap = sns.heatmap(dfs_speed, cmap='magma', annot=False, cbar=False, ax=ax)
+ax.set_title("Heatmap of Speed Data for Trials")
+
+
+fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+heatmap = sns.heatmap(dfs_zscore, cmap='magma', annot=False, cbar=False, ax=ax)
+ax.set_title("Heatmap of zscore Data for Trials")
+
+#%%
 # Plot average heatmap
-fig, ax = plt.subplots(4, 1, figsize=(12, 8), gridspec_kw={'height_ratios': [1, 1, 3, 2]})
+fig, ax = plt.subplots(4, 1, figsize=(8, 8), gridspec_kw={'height_ratios': [1, 1, 4, 2]})
 # Plot the average speed heatmap
 heatmap_avg_speed = sns.heatmap(reshaped_avg_speed, cmap='magma', annot=False, cbar=False, ax=ax[0])
 ax[0].set_title("Average Heatmap of Speed Data")

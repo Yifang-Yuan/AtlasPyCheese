@@ -34,7 +34,7 @@ input_format_df = {
     'before_win': 1,
     'after_win': 1,
     'low_pass_filter_frequency': 80,
-    'parent_folder': 'G:/CheeseboardYY/Group D/1819287/',
+    'parent_folder': 'D:/CheeseboardYY/Group D/1819287/',
     'MouseID': '1819287',
     'output_folder': 'SingleTrailPlot'
     }
