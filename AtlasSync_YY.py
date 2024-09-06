@@ -11,7 +11,7 @@ import os
 import re
 import numpy as np
 import matplotlib.pyplot as plt
-import photometry_functions as af
+import AtlasFunction as af
 import scipy.signal as signal
 from scipy import stats
 import seaborn
@@ -466,11 +466,11 @@ def MainFunction (input_format_df,mouse_ID):
     cold_files = ReadInFiles(input_format_df)
     PlotMousePETH (cold_files,input_format_df,mouse_ID)
     PlotMouseHeatMap(cold_files, input_format_df, mouse_ID)
-    return cold_files
+    return 
 
 # atlas_folder = 'E:\Mingshuai\Group D\1769568/'
 # sync_folder = '/Users/zhumingshuai/Desktop/Programming/Data/Atlas/Sample/'
 # cold_folder = '/Users/zhumingshuai/Desktop/Programming/Data/Atlas/Sample/Training_Data_Day1.xlsx'
 # a = cold_file(cold_folder,sync_folder,atlas_folder,input_format_df)
  
-cold_files=MainFunction(input_format_df,input_format_df['MouseID'])
+MainFunction(input_format_df,input_format_df['MouseID'])
