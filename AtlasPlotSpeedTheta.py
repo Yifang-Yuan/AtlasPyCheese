@@ -15,6 +15,7 @@ from scipy import signal
 import numpy as np
 import seaborn as sns
 import photometry_functions as fp
+import glob
 
 def butter_filter(data, btype='low', cutoff=10, fs=9938.4, order=5): 
     # cutoff and fs in Hz
@@ -90,28 +91,68 @@ def plot_wavelet(ax,sst,frequency,power,Fs=10000,colorBar=False,logbase=False):
     return -1
 
 #%%
-dpath='G:/CheeseboardYY/Group D/1819287/speed_files/Day5/'
-filename='Speed_lpfw_Day5-3.csv'
+dpath='G:/CheeseboardYY/Group D/1819287/speed_files/'
 Fs=840
-filepath=os.path.join(dpath,filename)
-df = pd.read_csv(filepath)
-sample_number=len(df)
-midpoint=sample_number//2
 
-speed_data = df['instant_speed'].values
-speed_data[speed_data > 20] = np.nan
-speed_series = pd.Series(speed_data)
-speed_series.interpolate(method='nearest', inplace=True)
-speed_data=speed_series.to_numpy()
-reshaped_speed = speed_data.reshape(1, -1)
-# Prepare data for wavelet analysis
-zscore_raw = -df['raw_z_score'].values
-zscore_raw=notchfilter (zscore_raw,f0=100,bw=10,fs=840)
-zscore_smooth=fp.smooth_signal(zscore_raw,window_len=10,window='flat')
-reshaped_zscore = zscore_smooth.reshape(1, -1)
-zscore_bandpass = band_pass_filter(zscore_smooth, 4, 100, Fs)
-# Calculate the wavelet transform
-sst, frequency, power, global_ws = Calculate_wavelet(zscore_bandpass, lowpassCutoff=100, Fs=Fs, scale=10)
+pattern = os.path.join(dpath, 'Day*/', 'Speed_*.csv')
+# Get a list of all matching files
+file_list = glob.glob(pattern)
+# Loop through the file list and read each file
+dfs_speed = []
+dfs_zscore= []
+dfs=[]
+for file_path in file_list:
+    try:
+        df = pd.read_csv(file_path)
+        df['instant_speed'] = df['instant_speed'].mask(df['instant_speed'] > 20)
+        df['instant_speed'].interpolate(method='nearest', inplace=True)
+        df['instant_speed'].fillna(method='bfill', inplace=True)  # Fill NaNs at the beginning
+        df['instant_speed'].fillna(method='ffill', inplace=True)  # Fill NaNs at the end
+        reshaped_speed = df['instant_speed'].values.reshape(1, -1)
+        
+        zscore_raw = -df['raw_z_score'].values
+        zscore_raw=notchfilter (zscore_raw,f0=100,bw=10,fs=840)
+        zscore_smooth=fp.smooth_signal(zscore_raw,window_len=10,window='flat')
+        zscore_bandpass = band_pass_filter(zscore_smooth, 4, 100, Fs)
+        reshaped_zscore = zscore_smooth.reshape(1, -1)
+        
+        sst, frequency, power, global_ws = Calculate_wavelet(zscore_bandpass, lowpassCutoff=100, Fs=Fs, scale=10)
+        reshaped_zscore_bandpass=zscore_bandpass.reshape(1, -1)
+        
+        fig, ax = plt.subplots(3, 1, figsize=(12, 4),gridspec_kw={'height_ratios': [1, 1, 3]})
+        heatmap =sns.heatmap(reshaped_speed, cmap='magma', annot=False, cbar=False, ax=ax[0])
+        ax[0].set_title("Heatmap of Speed Data")
+        ax[0].tick_params(labelbottom=False)  # Remove x-tick labels
+        ax[0].tick_params(bottom=False)  # Remove x-ticks
+
+
+        heatmap_zscore =sns.heatmap(reshaped_zscore, cmap='magma', annot=False, cbar=False, ax=ax[1])
+        ax[1].set_title("Heatmap of Zscore")
+        ax[1].tick_params(labelbottom=False)  # Remove x-tick labels
+        ax[1].tick_params(bottom=False)  # Remove x-ticks
+
+        # Plot wavelet analysis on the second axis (ax[1])
+        plot_wavelet(ax[2], sst, frequency, power, Fs, colorBar=True, logbase=True)
+        ax[2].set_title("Theta band")
+        cbar_ax = fig.add_axes([ax[0].get_position().x0, ax[2].get_position().y0 - 0.15, 
+                                ax[0].get_position().width*0.2, 0.03])  # Adjust the position of the colorbar
+        plt.colorbar(heatmap.collections[0], cax=cbar_ax, orientation='horizontal')
+
+        cbar_ax = fig.add_axes([ax[1].get_position().x0+0.2, ax[2].get_position().y0 - 0.15, 
+                                ax[1].get_position().width*0.2, 0.03])  # Adjust the position of the colorbar
+        plt.colorbar(heatmap_zscore.collections[0], cax=cbar_ax, orientation='horizontal')
+        plt.show()
+        dfs.append(df)
+        dfs_speed.append(df['instant_speed'].values)
+        dfs_zscore.append (zscore_smooth)
+        
+    except Exception as e:
+        print(f"Error reading {file_path}: {e}")
+
+
+#%%
+
+
 reshaped_zscore_bandpass=zscore_bandpass.reshape(1, -1)
 #%%
 fig, ax = plt.subplots(3, 1, figsize=(12, 4),gridspec_kw={'height_ratios': [1, 1, 3]})

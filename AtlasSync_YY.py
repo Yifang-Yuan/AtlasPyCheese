@@ -31,8 +31,8 @@ input_format_df = {
     'atlas_frame_rate': 840,
     'bonsai_frame_rate': 24,
     'atlas_recording_time':30,    
-    'before_win': 0.5,
-    'after_win': 0.5,
+    'before_win': 1,
+    'after_win': 1,
     'low_pass_filter_frequency': 80,
     'parent_folder': 'G:/CheeseboardYY/Group D/1819287/',
     'MouseID': '1819287',
@@ -436,7 +436,7 @@ def PlotMousePETH (cold_files,input_format_df,mouse_ID):
     fig.savefig(output_path)
     
 def PlotMouseHeatMap (cold_files,input_format_df,mouse_ID):
-    target_len = (input_format_df['before_win']+input_format_df['after_win'])*input_format_df['atlas_frame_rate']
+    target_len = int((input_format_df['before_win']+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
     atlas_tot = pd.DataFrame()
     for i in cold_files:
         if i.filtered_atlas_day.size!=0:
