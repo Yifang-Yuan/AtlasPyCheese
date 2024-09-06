@@ -83,7 +83,7 @@ def plot_wavelet(ax,sst,frequency,power,Fs=10000,colorBar=False,logbase=False):
     yax.set_major_formatter(ticker.ScalarFormatter())
     if colorBar: 
         fig = plt.gcf()  # Get the current figure
-        position = fig.add_axes([0.5, -0.05, 0.4, 0.05])
+        position = fig.add_axes([0.6, -0.03, 0.2, 0.02])
         #position = fig.add_axes()
         cbar=plt.colorbar(CS, cax=position, orientation='horizontal', fraction=0.05, pad=0.5)
         cbar.set_label('Power (mV$^2$)', fontsize=12) 
@@ -91,15 +91,18 @@ def plot_wavelet(ax,sst,frequency,power,Fs=10000,colorBar=False,logbase=False):
     return -1
 
 #%%
-dpath='G:/CheeseboardYY/Group D/1819287/speed_files/'
+dpath='G:/CheeseboardYY/Group D/1819287/speed_files_2sec/'
 Fs=840
-
 pattern = os.path.join(dpath, 'Day*/', 'Speed_*.csv')
 # Get a list of all matching files
 file_list = glob.glob(pattern)
 # Loop through the file list and read each file
 dfs_speed = []
 dfs_zscore= []
+dfs_power=[]
+dfs_sst=[]
+dfs_power_ripple=[]
+dfs_sst_ripple=[]
 dfs=[]
 for file_path in file_list:
     try:
@@ -113,76 +116,119 @@ for file_path in file_list:
         zscore_raw = -df['raw_z_score'].values
         zscore_raw=notchfilter (zscore_raw,f0=100,bw=10,fs=840)
         zscore_smooth=fp.smooth_signal(zscore_raw,window_len=10,window='flat')
-        zscore_bandpass = band_pass_filter(zscore_smooth, 4, 100, Fs)
-        reshaped_zscore = zscore_smooth.reshape(1, -1)
         
-        sst, frequency, power, global_ws = Calculate_wavelet(zscore_bandpass, lowpassCutoff=100, Fs=Fs, scale=10)
+        reshaped_zscore = zscore_smooth.reshape(1, -1)
+        zscore_bandpass = band_pass_filter(zscore_smooth, 4, 100, Fs)
+        sst, frequency, power, _ = Calculate_wavelet(zscore_bandpass, lowpassCutoff=100, Fs=Fs, scale=10)
         reshaped_zscore_bandpass=zscore_bandpass.reshape(1, -1)
         
-        fig, ax = plt.subplots(3, 1, figsize=(12, 4),gridspec_kw={'height_ratios': [1, 1, 3]})
+        
+        zscore_ripple_bandpass=band_pass_filter(zscore_smooth,130,180,Fs)
+        sst_ripple,frequency_ripple,power_ripple,_=Calculate_wavelet(zscore_ripple_bandpass,lowpassCutoff=180,Fs=Fs,scale=2)
+        
+        
+        fig, ax = plt.subplots(4, 1, figsize=(12, 6),gridspec_kw={'height_ratios': [1, 1, 3,3]})
         heatmap =sns.heatmap(reshaped_speed, cmap='magma', annot=False, cbar=False, ax=ax[0])
         ax[0].set_title("Heatmap of Speed Data")
         ax[0].tick_params(labelbottom=False)  # Remove x-tick labels
         ax[0].tick_params(bottom=False)  # Remove x-ticks
-
 
         heatmap_zscore =sns.heatmap(reshaped_zscore, cmap='magma', annot=False, cbar=False, ax=ax[1])
         ax[1].set_title("Heatmap of Zscore")
         ax[1].tick_params(labelbottom=False)  # Remove x-tick labels
         ax[1].tick_params(bottom=False)  # Remove x-ticks
 
-        # Plot wavelet analysis on the second axis (ax[1])
         plot_wavelet(ax[2], sst, frequency, power, Fs, colorBar=True, logbase=True)
         ax[2].set_title("Theta band")
-        cbar_ax = fig.add_axes([ax[0].get_position().x0, ax[2].get_position().y0 - 0.15, 
+        
+        plot_wavelet(ax[3], sst_ripple, frequency_ripple, power_ripple, Fs, colorBar=True, logbase=True)
+        ax[3].set_title("Ripple band")
+        
+        cbar_ax = fig.add_axes([ax[0].get_position().x0, ax[3].get_position().y0 - 0.15, 
                                 ax[0].get_position().width*0.2, 0.03])  # Adjust the position of the colorbar
         plt.colorbar(heatmap.collections[0], cax=cbar_ax, orientation='horizontal')
 
-        cbar_ax = fig.add_axes([ax[1].get_position().x0+0.2, ax[2].get_position().y0 - 0.15, 
+        cbar_ax = fig.add_axes([ax[1].get_position().x0+0.2, ax[3].get_position().y0 - 0.15, 
                                 ax[1].get_position().width*0.2, 0.03])  # Adjust the position of the colorbar
+        
         plt.colorbar(heatmap_zscore.collections[0], cax=cbar_ax, orientation='horizontal')
+        plt.tight_layout()
         plt.show()
         dfs.append(df)
         dfs_speed.append(df['instant_speed'].values)
         dfs_zscore.append (zscore_smooth)
-        
+        dfs_power.append(power)
+        dfs_sst.append(sst)
+        dfs_power_ripple.append(power_ripple)
+        dfs_sst_ripple.append(sst_ripple)
     except Exception as e:
         print(f"Error reading {file_path}: {e}")
-
-
 #%%
+# Convert lists to NumPy arrays
+dfs_speed = np.array(dfs_speed)  # Shape: (num_files, num_points)
+dfs_zscore = np.array(dfs_zscore)  # Shape: (num_files, num_points)
+dfs_power = np.array(dfs_power)  # Shape: (num_files, num_frequencies, num_points)
+dfs_sst=np.array(dfs_sst)
+dfs_power_ripple = np.array(dfs_power_ripple)  # Shape: (num_files, num_frequencies, num_points)
+dfs_sst_ripple=np.array(dfs_sst_ripple)
+# Compute the averages
+avg_speed = np.mean(dfs_speed, axis=0)
+avg_zscore = np.mean(dfs_zscore, axis=0)
+avg_power = np.mean(dfs_power, axis=0)
+avg_sst = np.mean(dfs_sst, axis=0)
+avg_power_ripple = np.mean(dfs_power_ripple, axis=0)
+avg_sst_ripple = np.mean(dfs_sst_ripple, axis=0)
+# Reshape the average arrays for heatmap (1, -1)
+reshaped_avg_speed = avg_speed.reshape(1, -1)
+reshaped_avg_zscore = avg_zscore.reshape(1, -1)
 
+sem_zscore = np.std(dfs_zscore, axis=0) / np.sqrt(dfs_zscore.shape[0])  # SEM
+ci95_zscore = 1.96 * sem_zscore  # 95% confidence interval
+# Plot average heatmap
+fig, ax = plt.subplots(4, 1, figsize=(12, 8), gridspec_kw={'height_ratios': [1, 1, 3, 2]})
+# Plot the average speed heatmap
+heatmap_avg_speed = sns.heatmap(reshaped_avg_speed, cmap='magma', annot=False, cbar=False, ax=ax[0])
+ax[0].set_title("Average Heatmap of Speed Data")
+ax[0].tick_params(labelbottom=False)
+ax[0].tick_params(bottom=False)
 
-reshaped_zscore_bandpass=zscore_bandpass.reshape(1, -1)
-#%%
-fig, ax = plt.subplots(3, 1, figsize=(12, 4),gridspec_kw={'height_ratios': [1, 1, 3]})
-heatmap =sns.heatmap(reshaped_speed, cmap='magma', annot=False, cbar=False, ax=ax[0])
-ax[0].set_title("Heatmap of Speed Data")
-ax[0].tick_params(labelbottom=False)  # Remove x-tick labels
-ax[0].tick_params(bottom=False)  # Remove x-ticks
+# Plot the average z-score heatmap
+heatmap_avg_zscore = sns.heatmap(reshaped_avg_zscore, cmap='magma', annot=False, cbar=False, ax=ax[1])
+ax[1].set_title("Average Heatmap of Z-Score")
+ax[1].tick_params(labelbottom=False)
+ax[1].tick_params(bottom=False)
 
+# Plot the averaged z-score with 95% CI on ax[2]
+time_axis = np.arange(len(avg_zscore))  # Create a time axis
+ax[2].plot(time_axis, avg_zscore, color='blue', label='Mean Z-Score')
+ax[2].fill_between(time_axis, avg_zscore - ci95_zscore, avg_zscore + ci95_zscore, color='blue', alpha=0.2, label='95% CI')
+ax[2].set_title("Averaged Z-Score with 95% CI")
+ax[2].set_xlabel("Time")
+ax[2].set_ylabel("Z-Score")
+ax[2].legend(loc="upper right")
+ax[2].set_xlim([0, len(time_axis) - 1])
+ax[2].set_ylim([avg_zscore.min() - ci95_zscore.max(), avg_zscore.max() + ci95_zscore.max()])
+ax[2].margins(x=0, y=0)
+# Optional: Remove the bottom and left ticks if needed (for a cleaner plot)
+ax[2].tick_params(left=False, bottom=False)
+# Remove the frame (top and right spines)
+ax[2].spines['top'].set_visible(False)
+ax[2].spines['right'].set_visible(False)
+#plot_wavelet(ax[3], avg_sst_ripple, frequency_ripple, avg_power_ripple, Fs, colorBar=True, logbase=True)
+plot_wavelet(ax[3], avg_sst, frequency, avg_power, Fs, colorBar=True, logbase=True)
+ax[3].set_title("Average Power (Theta Band)")
+#set color bar
+cbar_ax = fig.add_axes([ax[0].get_position().x0, ax[3].get_position().y0 - 0.15, 
+                        ax[0].get_position().width * 0.2, 0.01])
+plt.colorbar(heatmap_avg_speed.collections[0], cax=cbar_ax, orientation='horizontal')
 
-heatmap_zscore =sns.heatmap(reshaped_zscore, cmap='magma', annot=False, cbar=False, ax=ax[1])
-ax[1].set_title("Heatmap of Zscore")
-ax[1].tick_params(labelbottom=False)  # Remove x-tick labels
-ax[1].tick_params(bottom=False)  # Remove x-ticks
+cbar_ax = fig.add_axes([ax[1].get_position().x0 + 0.2, ax[3].get_position().y0 - 0.15, 
+                        ax[1].get_position().width * 0.2, 0.01])
+plt.colorbar(heatmap_avg_zscore.collections[0], cax=cbar_ax, orientation='horizontal')
 
-# Plot wavelet analysis on the second axis (ax[1])
-plot_wavelet(ax[2], sst, frequency, power, Fs, colorBar=True, logbase=True)
-ax[2].set_title("Theta band")
-cbar_ax = fig.add_axes([ax[0].get_position().x0, ax[2].get_position().y0 - 0.15, 
-                        ax[0].get_position().width*0.2, 0.03])  # Adjust the position of the colorbar
-plt.colorbar(heatmap.collections[0], cax=cbar_ax, orientation='horizontal')
-
-cbar_ax = fig.add_axes([ax[1].get_position().x0+0.2, ax[2].get_position().y0 - 0.15, 
-                        ax[1].get_position().width*0.2, 0.03])  # Adjust the position of the colorbar
-plt.colorbar(heatmap_zscore.collections[0], cax=cbar_ax, orientation='horizontal')
+plt.tight_layout()
 plt.show()
-#%%
-fig, ax = plt.subplots(figsize=(12, 3))
-zscore_bandpass=band_pass_filter(zscore_smooth,130,180,Fs)
-sst,frequency,power,global_ws=Calculate_wavelet(zscore_bandpass,lowpassCutoff=200,Fs=Fs,scale=4)
-plot_wavelet(ax,sst,frequency,power,Fs,colorBar=False,logbase=False)
+
 #%%
 fig, ax = plt.subplots(figsize=(12, 3))
 ax.plot(zscore_smooth)
