@@ -34,9 +34,9 @@ input_format_df = {
     'before_win': 2,
     'after_win': 2,
     'low_pass_filter_frequency': 60,
-    'parent_folder': 'G:/CheeseboardYY/Group D/1819287/',
+    'parent_folder': 'F:/CheeseboardYY/Group D/1819287/',
     'MouseID': '1819287',
-    'output_folder': 'SingleTrailPlot'
+    'output_folder': 'SingleTrialPlot'
     }
 
 pfw = None
@@ -210,8 +210,8 @@ class key_trail:
            if (lpfw_enter_adj<(30-input_format_df['after_win'])) and (lpfw_enter_adj>input_format_df['before_win']):
                title1 = 'Day'+str(self.day)+'_trail'+str(self.trail_ID)
                fig1, ax = plt.subplots(figsize=(10, 5))
-               before_frame = int((lpfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate'])
-               after_frame = int((lpfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
+               before_frame = int(round((lpfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate']))
+               after_frame = int(round((lpfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate']))
                self.cropped_filtered_atlas_lpfw = self.filtered_atlas[before_frame:after_frame]
                ax.plot(np.arange(0,len(self.cropped_filtered_atlas_lpfw))/input_format_df['atlas_frame_rate']-input_format_df['before_win'],self.cropped_filtered_atlas_lpfw,color='green')
                ax.axvline(x=0,color='r', linestyle='--', label='reward collection at less preferred well')
@@ -235,6 +235,10 @@ class key_trail:
                if not os.path.exists(speed_path):
                    os.makedirs(speed_path)
                speed_file=self.CalculateInstantSpeed(input_format_df,start_frame=before_frame,end_frame=after_frame)
+               global a_speedfiletest
+               a_speedfiletest = speed_file
+               print ('before_frame---',before_frame)
+               print ('after_frame---',after_frame)
                if speed_file is not None:
                    speed_file=speed_file.set_index((time*input_format_df['atlas_frame_rate']).astype(int))
                    speed_file.to_csv(os.path.join(speed_path,'Speed_lpfw_Day'+str(self.day)+'-'+str(self.trail_ID)+'.csv'),index = True)
