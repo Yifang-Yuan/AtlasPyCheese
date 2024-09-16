@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -30,9 +31,9 @@ input_format_df = {
     'atlas_frame_rate': 840,
     'bonsai_frame_rate': 24,
     'atlas_recording_time':30,    
-    'before_win': 5,
-    'after_win': 5,
-    'low_pass_filter_frequency': 100,
+    'before_win': 0.5,
+    'after_win': 0.5,
+    'low_pass_filter_frequency': 80,
     'parent_folder': 'E:/Mingshuai/workingfolder/Group D/1819287/',
     'MouseID': '1819287',
     'output_folder': 'SingleTrailPlot'
@@ -140,17 +141,17 @@ class key_trail:
         ax.plot(self.smoothed_atlas.index/input_format_df['atlas_frame_rate'],self.smoothed_atlas[0])
         ax.set_title(self.cold.loc[0,'name'])
         if not (np.isnan(self.pfw_enter)):
-            if (self.pfw_enter+self.starttime_cold-self.starttime_sync < 30):
+            if (self.pfw_enter+self.starttime_cold-self.starttime_sync < input_format_df['atlas_recording_time']):
                 ax.axvline(x=self.pfw_enter+self.starttime_cold-self.starttime_sync, color='r', linestyle='--', label='preferred_well_enter_time')
                 ax.legend(loc='upper right')
-            if (self.pfw_leave+self.starttime_cold-self.starttime_sync < 30):
+            if (self.pfw_leave+self.starttime_cold-self.starttime_sync < input_format_df['atlas_recording_time']):
                 ax.axvline(x=self.pfw_leave+self.starttime_cold-self.starttime_sync, color='g', linestyle='--', label='preferred_well_leave_time')
                 ax.legend(loc='upper right')
         if not (np.isnan(self.pfw_enter)):
-            if (self.lpfw_enter+self.starttime_cold-self.starttime_sync < 30):
+            if (self.lpfw_enter+self.starttime_cold-self.starttime_sync < input_format_df['atlas_recording_time']):
                 ax.axvline(x=self.lpfw_enter+self.starttime_cold-self.starttime_sync, color='b', linestyle='--', label='less_preferred_well_enter_time')
                 ax.legend(loc='upper right')
-            if (self.lpfw_leave+self.starttime_cold-self.starttime_sync < 30):
+            if (self.lpfw_leave+self.starttime_cold-self.starttime_sync < input_format_df['atlas_recording_time']):
                 ax.axvline(x=self.lpfw_leave+self.starttime_cold-self.starttime_sync, color='purple', linestyle='--', label='less_preferred_well_leave_time')
                 ax.legend(loc='upper right')
         ax.set_xlabel('time/s')
@@ -169,12 +170,13 @@ class key_trail:
            pfw_enter_adj = self.pfw_enter+self.starttime_cold-self.starttime_sync
            
            #find out whether the collection is fully recorded or not
-           if (pfw_enter_adj<(30-input_format_df['after_win'])) and (pfw_enter_adj>input_format_df['before_win']):
+           if (pfw_enter_adj<(input_format_df['atlas_recording_time']-input_format_df['after_win'])) and (pfw_enter_adj>input_format_df['before_win']):
                title1 = 'Day'+str(self.day)+'_trail'+str(self.trail_ID)
                fig1, ax = plt.subplots(figsize=(10, 5))
-               before_frame = int((pfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate'])
-               after_frame = int((pfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
+               before_frame = round((pfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate'])
+               after_frame = round((pfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
                self.cropped_filtered_atlas = self.filtered_atlas[before_frame:after_frame]
+               
                ax.plot(time,self.cropped_filtered_atlas,color='purple')
                ax.axvline(x=0,color='r', linestyle='--', label='reward collection at preferred well')
                ax.set_title(self.cold.loc[0,'name'])
@@ -205,11 +207,11 @@ class key_trail:
         if not (np.isnan(self.lpfw_enter)):
            lpfw_enter_adj = self.lpfw_enter+self.starttime_cold-self.starttime_sync
            #find out whether the collection is fully recorded or not
-           if (lpfw_enter_adj<(30-input_format_df['after_win'])) and (lpfw_enter_adj>input_format_df['before_win']):
+           if (lpfw_enter_adj<(input_format_df['atlas_recording_time']-input_format_df['after_win'])) and (lpfw_enter_adj>input_format_df['before_win']):
                title1 = 'Day'+str(self.day)+'_trail'+str(self.trail_ID)
                fig1, ax = plt.subplots(figsize=(10, 5))
-               before_frame = int((lpfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate'])
-               after_frame = int((lpfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
+               before_frame = round((lpfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate'])
+               after_frame = round((lpfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
                self.cropped_filtered_atlas_lpfw = self.filtered_atlas[before_frame:after_frame]
                ax.plot(np.arange(0,len(self.cropped_filtered_atlas_lpfw))/input_format_df['atlas_frame_rate']-input_format_df['before_win'],self.cropped_filtered_atlas_lpfw,color='green')
                ax.axvline(x=0,color='r', linestyle='--', label='reward collection at less preferred well')
@@ -236,6 +238,20 @@ class key_trail:
                if speed_file is not None:
                    speed_file=speed_file.set_index((time*input_format_df['atlas_frame_rate']).astype(int))
                    speed_file.to_csv(os.path.join(speed_path,'Speed_lpfw_Day'+str(self.day)+'-'+str(self.trail_ID)+'.csv'),index = True)
+        
+        #Obtain a random time for shuffle analysis
+        lower_bound = input_format_df['before_win']
+        upper_bound = input_format_df['atlas_recording_time']-input_format_df['after_win']
+        self.ran_centre = np.random.uniform(low=lower_bound, high=upper_bound)
+        before_frame = round((self.ran_centre-input_format_df['before_win'])*input_format_df['atlas_frame_rate'])
+        after_frame = round((self.ran_centre+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
+        self.random_atlas1= self.filtered_atlas[before_frame:after_frame]
+        lower_bound = input_format_df['before_win']
+        upper_bound = input_format_df['atlas_recording_time']-input_format_df['after_win']
+        self.ran_centre = np.random.uniform(low=lower_bound, high=upper_bound)
+        before_frame = round((self.ran_centre-(input_format_df['before_win']))*input_format_df['atlas_frame_rate'])
+        after_frame = round((self.ran_centre+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
+        self.random_atlas2= self.filtered_atlas[before_frame:after_frame]
         return
                
 class cold_file:
@@ -294,35 +310,43 @@ class cold_file:
         self.IntegrateAtlas(input_format_df)
             
     def IntegrateAtlas(self,input_format_df):
-        target_len = (input_format_df['before_win']+input_format_df['after_win'])*input_format_df['atlas_frame_rate']
+        target_len = int((input_format_df['before_win']+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
         temp_atlas_day = np.empty((target_len,0))
+        tempran_atlas_day = np.empty((target_len,0))
         D = []
         T = []
+        
         for i in self.key_trails:
             if i.cropped_filtered_atlas is not None:
+                global test
+                test = i.random_atlas1
                 temp_atlas_day = np.concatenate((temp_atlas_day, i.cropped_filtered_atlas), axis=1)
                 D.append('Day'+str(self.day))
                 T.append('Trail'+str(i.trail_ID))
+                tempran_atlas_day = np.concatenate((tempran_atlas_day, i.random_atlas1), axis=1)
             if i.cropped_filtered_atlas_lpfw is not None:
                 temp_atlas_day = np.concatenate((temp_atlas_day, i.cropped_filtered_atlas_lpfw), axis=1)
                 D.append('Day'+str(self.day))
                 T.append('Trail'+str(i.trail_ID))
+                tempran_atlas_day = np.concatenate((tempran_atlas_day, i.random_atlas2), axis=1)
+        
         header = pd.MultiIndex.from_arrays([D,T])
         if len(temp_atlas_day) == 0:
             return
-        self.filtered_atlas_day = pd.DataFrame(temp_atlas_day,columns=header)
         
+        self.filtered_atlas_day = pd.DataFrame(temp_atlas_day,columns=header)
         self.filtered_atlas_day.columns.names = ['Day', 'Trail']
-        global test
-        test = len(temp_atlas_day)
+        
         mean = []
         CI = []
+        
         for i in range (self.filtered_atlas_day.shape[0]):
             mean.append(self.filtered_atlas_day.iloc[i,:].mean())
             std = np.std(self.filtered_atlas_day.iloc[i,:])
             n = self.filtered_atlas_day.shape[1]
             t_value = stats.t.ppf(0.975, df=n-1)
             CI.append(t_value*std/np.sqrt(n))
+        
         fig,ax = plt.subplots(figsize=(10, 5))
         time = np.arange(0,target_len)/input_format_df['atlas_frame_rate']-input_format_df['before_win']
         ax.plot(time, mean, color='blue', label='Mean Signal')
@@ -333,6 +357,26 @@ class cold_file:
         ax.set_xlabel('time/s')
         ax.set_ylabel('z-score')
         ax.set_title('Day'+str(self.day)+' average PETH')
+        
+        ran_mean = []
+        ran_CI = []
+        
+        self.ran_atlas_day = pd.DataFrame(tempran_atlas_day,columns=header)
+        self.filtered_atlas_day.columns.names = ['Day', 'Trail']
+        
+        for i in range (self.ran_atlas_day.shape[0]):
+            ran_mean.append(self.ran_atlas_day.iloc[i,:].mean())
+            std = np.std(self.ran_atlas_day.iloc[i,:])
+            n = self.ran_atlas_day.shape[1]
+            t_value = stats.t.ppf(0.975, df=n-1)
+            ran_CI.append(t_value*std/np.sqrt(n))
+        
+        ran_mean = np.array(ran_mean)
+        ran_CI = np.array(ran_CI)
+        ax.plot(time, ran_mean, color='grey', label='Shuffle analysis')
+        ax.legend(loc='upper right')
+        ax.fill_between(time, ran_mean-ran_CI, ran_mean+ran_CI, color='grey', alpha=0.2, label='95% CI')
+        
         output_path = os.path.join(input_format_df['parent_folder'],'PETH')
         if not os.path.exists(output_path):
             os.makedirs(output_path)
@@ -358,10 +402,8 @@ def LowPassFilter (x,input_format_df):
     # Normalized cutoff frequency (cutoff frequency / Nyquist frequency)
     nyq = 0.5 * fs
     normal_cutoff = cutoff / nyq
-    
     # Order of the filter
     order = 5
-    
     # Get the filter coefficients
     b, a = signal.butter(order, normal_cutoff, btype='low', analog=False)
     y=signal.filtfilt(b, a, x, axis=0)
@@ -405,13 +447,20 @@ def ReadInFiles (input_format_df):
     return cold_files
 
 def PlotMousePETH (cold_files,input_format_df,mouse_ID):
-    target_len = (input_format_df['before_win']+input_format_df['after_win'])*input_format_df['atlas_frame_rate']
+    target_len = int((input_format_df['before_win']+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
     atlas_tot = np.empty((target_len, 0))
+    ran_atlas_tot = np.empty((target_len, 0))
     for i in cold_files:
         if i.filtered_atlas_day.size!=0:
             atlas_tot = np.concatenate((atlas_tot, i.filtered_atlas_day), axis=1)
+            ran_atlas_tot = np.concatenate((ran_atlas_tot, i.ran_atlas_day), axis=1)
+   
+   
     mean = []
     CI = []
+    ran_mean = []
+    ran_CI = []
+    
     for i in range (atlas_tot.shape[0]):
         mean.append(atlas_tot[i,:].mean())
         std = np.std(atlas_tot[i,:])
@@ -420,14 +469,29 @@ def PlotMousePETH (cold_files,input_format_df,mouse_ID):
         CI.append(t_value*std/np.sqrt(n))
     fig,ax = plt.subplots(figsize=(10, 5))
     time = np.arange(0,target_len)/input_format_df['atlas_frame_rate']-input_format_df['before_win']
-    ax.plot(time, mean, color='blue', label='Mean Signal')
     CI = np.array(CI)
     mean = np.array(mean)
+    ax.plot(time, mean, color='blue', label='Mean Signal')
     ax.fill_between(time, mean-CI, mean+CI, color='blue', alpha=0.2, label='95% CI')
     ax.axvline(x=0,color='r', linestyle='--', label='reward collection')
     ax.set_xlabel('time/s')
     ax.set_ylabel('z-score')
     ax.set_title('Mouse'+str(mouse_ID)+' average PETH')
+    
+    for i in range (ran_atlas_tot.shape[0]):
+        ran_mean.append(ran_atlas_tot[i,:].mean())
+        std = np.std(ran_atlas_tot[i:,])
+        n = ran_atlas_tot.shape[1]
+        t_value = stats.t.ppf(0.975, df=n-1)
+        ran_CI.append(t_value*std/np.sqrt(n))
+    
+    ran_mean = np.array(ran_mean)
+    ran_CI = np.array(ran_CI)
+    ax.plot(time, ran_mean, color='grey', label='Shuffle analysis')
+    ax.legend(loc='upper right')
+    ax.fill_between(time, ran_mean-ran_CI, ran_mean+ran_CI, color='grey', alpha=0.2, label='95% CI')
+    
+    
     output_path = os.path.join(input_format_df['parent_folder'],'PETH')
     if not os.path.exists(output_path):
         os.makedirs(output_path)
@@ -466,11 +530,11 @@ def MainFunction (input_format_df,mouse_ID):
     cold_files = ReadInFiles(input_format_df)
     PlotMousePETH (cold_files,input_format_df,mouse_ID)
     PlotMouseHeatMap(cold_files, input_format_df, mouse_ID)
-    return
+    return cold_files
 
 # atlas_folder = 'E:\Mingshuai\Group D\1769568/'
 # sync_folder = '/Users/zhumingshuai/Desktop/Programming/Data/Atlas/Sample/'
 # cold_folder = '/Users/zhumingshuai/Desktop/Programming/Data/Atlas/Sample/Training_Data_Day1.xlsx'
 # a = cold_file(cold_folder,sync_folder,atlas_folder,input_format_df)
  
-MainFunction(input_format_df,input_format_df['MouseID'])
+cold_files=MainFunction(input_format_df,input_format_df['MouseID'])
