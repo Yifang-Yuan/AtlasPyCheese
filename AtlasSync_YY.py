@@ -11,7 +11,7 @@ import os
 import re
 import numpy as np
 import matplotlib.pyplot as plt
-import photometry_functions as af
+import AtlasFunction as af
 import scipy.signal as signal
 from scipy import stats
 import seaborn
@@ -31,12 +31,12 @@ input_format_df = {
     'atlas_frame_rate': 840,
     'bonsai_frame_rate': 24,
     'atlas_recording_time':30,    
-    'before_win': 0.5,
-    'after_win': 0.5,
-    'low_pass_filter_frequency': 80,
-    'parent_folder': 'G:/CheeseboardYY/Group D/1819287/',
+    'before_win': 2,
+    'after_win': 2,
+    'low_pass_filter_frequency': 60,
+    'parent_folder': 'F:/CheeseboardYY/Group D/1819287/',
     'MouseID': '1819287',
-    'output_folder': 'SingleTrailPlot'
+    'output_folder': 'SingleTrialPlot'
     }
 
 pfw = None
@@ -210,8 +210,8 @@ class key_trail:
            if (lpfw_enter_adj<(30-input_format_df['after_win'])) and (lpfw_enter_adj>input_format_df['before_win']):
                title1 = 'Day'+str(self.day)+'_trail'+str(self.trail_ID)
                fig1, ax = plt.subplots(figsize=(10, 5))
-               before_frame = int((lpfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate'])
-               after_frame = int((lpfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
+               before_frame = int(round((lpfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate']))
+               after_frame = int(round((lpfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate']))
                self.cropped_filtered_atlas_lpfw = self.filtered_atlas[before_frame:after_frame]
                ax.plot(np.arange(0,len(self.cropped_filtered_atlas_lpfw))/input_format_df['atlas_frame_rate']-input_format_df['before_win'],self.cropped_filtered_atlas_lpfw,color='green')
                ax.axvline(x=0,color='r', linestyle='--', label='reward collection at less preferred well')
@@ -235,6 +235,10 @@ class key_trail:
                if not os.path.exists(speed_path):
                    os.makedirs(speed_path)
                speed_file=self.CalculateInstantSpeed(input_format_df,start_frame=before_frame,end_frame=after_frame)
+               global a_speedfiletest
+               a_speedfiletest = speed_file
+               print ('before_frame---',before_frame)
+               print ('after_frame---',after_frame)
                if speed_file is not None:
                    speed_file=speed_file.set_index((time*input_format_df['atlas_frame_rate']).astype(int))
                    speed_file.to_csv(os.path.join(speed_path,'Speed_lpfw_Day'+str(self.day)+'-'+str(self.trail_ID)+'.csv'),index = True)
@@ -436,7 +440,7 @@ def PlotMousePETH (cold_files,input_format_df,mouse_ID):
     fig.savefig(output_path)
     
 def PlotMouseHeatMap (cold_files,input_format_df,mouse_ID):
-    target_len = (input_format_df['before_win']+input_format_df['after_win'])*input_format_df['atlas_frame_rate']
+    target_len = int((input_format_df['before_win']+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
     atlas_tot = pd.DataFrame()
     for i in cold_files:
         if i.filtered_atlas_day.size!=0:
@@ -466,11 +470,11 @@ def MainFunction (input_format_df,mouse_ID):
     cold_files = ReadInFiles(input_format_df)
     PlotMousePETH (cold_files,input_format_df,mouse_ID)
     PlotMouseHeatMap(cold_files, input_format_df, mouse_ID)
-    return cold_files
+    return 
 
 # atlas_folder = 'E:\Mingshuai\Group D\1769568/'
 # sync_folder = '/Users/zhumingshuai/Desktop/Programming/Data/Atlas/Sample/'
 # cold_folder = '/Users/zhumingshuai/Desktop/Programming/Data/Atlas/Sample/Training_Data_Day1.xlsx'
 # a = cold_file(cold_folder,sync_folder,atlas_folder,input_format_df)
  
-cold_files=MainFunction(input_format_df,input_format_df['MouseID'])
+MainFunction(input_format_df,input_format_df['MouseID'])
