@@ -264,42 +264,42 @@ def plot_heatmap_all(dpath,Fs):
     plt.show()
     return -1
 #%%
-dpath='F:/CheeseboardYY/Group D/1804114/speed_files_2sec/'
+dpath='E:/workingfolder/Group D/1819287/speed_files/'
 Fs=840
 plot_heatmap_all(dpath,Fs)
 #%%
-#Check theta band with pyPhotometry data
-folder ='F:/CheeseboardYY/GCaMP8m/1804115/Day5_photometry_CB/'
-# File name
-file_name = 'py_py_4115-2024-08-04-131222_0.csv'
-Fs=130
-'''Read csv file and calculate zscore of the fluorescent signal'''
-raw_signal,raw_reference,Cam_Sync=fp.read_photometry_data (folder, file_name, readCamSync=True,plot=True)
-'''Get zdFF directly'''
-#zscore_raw = fp.get_zdFF(raw_reference,raw_signal,smooth_win=2,remove=0,lambd=5e4,porder=1,itermax=50)
-zscore_smooth=fp.smooth_signal(raw_signal,window_len=10,window='flat')
-zscore_bandpass = band_pass_filter(raw_signal, 4, 60, Fs)
-#reshaped_zscore_bandpass=zscore_bandpass.reshape(1, -1)
-sst, frequency, power, _ = Calculate_wavelet(zscore_bandpass, lowpassCutoff=60, Fs=Fs, scale=2)
-fig, ax = plt.subplots(1, 1, figsize=(8, 4))
-plot_wavelet(ax, sst, frequency, power, Fs, colorBar=False, logbase=True)
-ax.set_title("Theta band")
+# #Check theta band with pyPhotometry data
+# folder ='F:/CheeseboardYY/GCaMP8m/1804115/Day5_photometry_CB/'
+# # File name
+# file_name = 'py_py_4115-2024-08-04-131222_0.csv'
+# Fs=130
+# '''Read csv file and calculate zscore of the fluorescent signal'''
+# raw_signal,raw_reference,Cam_Sync=fp.read_photometry_data (folder, file_name, readCamSync=True,plot=True)
+# '''Get zdFF directly'''
+# #zscore_raw = fp.get_zdFF(raw_reference,raw_signal,smooth_win=2,remove=0,lambd=5e4,porder=1,itermax=50)
+# zscore_smooth=fp.smooth_signal(raw_signal,window_len=10,window='flat')
+# zscore_bandpass = band_pass_filter(raw_signal, 4, 60, Fs)
+# #reshaped_zscore_bandpass=zscore_bandpass.reshape(1, -1)
+# sst, frequency, power, _ = Calculate_wavelet(zscore_bandpass, lowpassCutoff=60, Fs=Fs, scale=2)
+# fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+# plot_wavelet(ax, sst, frequency, power, Fs, colorBar=False, logbase=True)
+# ax.set_title("Theta band")
 
-#%%
-#Check theta band with non-animal data
-file_path='F:/CheeseboardYY/Group D/Zscore_traceAll_1uW_SNR.csv'
-Fs=840
-df = pd.read_csv(file_path, header=None)
-zscore_raw = df[0].values[0:2*840]
-zscore_raw=notchfilter (zscore_raw,f0=100,bw=10,fs=Fs)
-zscore_smooth=fp.smooth_signal(zscore_raw,window_len=10,window='flat')
-zscore_bandpass = band_pass_filter(zscore_smooth, 4, 60, Fs)
-#reshaped_zscore_bandpass=zscore_bandpass.reshape(1, -1)
-sst, frequency, power, _ = Calculate_wavelet(zscore_bandpass, lowpassCutoff=100, Fs=Fs, scale=10)
-fig, ax = plt.subplots(1, 1, figsize=(8, 2))
-plot_wavelet(ax, sst, frequency, power, Fs, colorBar=False, logbase=True)
-ax.set_title("Theta band")
+# #%%
+# #Check theta band with non-animal data
+# file_path='F:/CheeseboardYY/Group D/Zscore_traceAll_1uW_SNR.csv'
+# Fs=840
+# df = pd.read_csv(file_path, header=None)
+# zscore_raw = df[0].values[0:2*840]
+# zscore_raw=notchfilter (zscore_raw,f0=100,bw=10,fs=Fs)
+# zscore_smooth=fp.smooth_signal(zscore_raw,window_len=10,window='flat')
+# zscore_bandpass = band_pass_filter(zscore_smooth, 4, 60, Fs)
+# #reshaped_zscore_bandpass=zscore_bandpass.reshape(1, -1)
+# sst, frequency, power, _ = Calculate_wavelet(zscore_bandpass, lowpassCutoff=100, Fs=Fs, scale=10)
+# fig, ax = plt.subplots(1, 1, figsize=(8, 2))
+# plot_wavelet(ax, sst, frequency, power, Fs, colorBar=False, logbase=True)
+# ax.set_title("Theta band")
 
-time_axis=np.arange(len(zscore_smooth)) /Fs
-fig, ax = plt.subplots(1, 1, figsize=(8, 2))
-ax.plot(time_axis, zscore_smooth, color='k', label='Smoothed Z-Score')
+# time_axis=np.arange(len(zscore_smooth)) /Fs
+# fig, ax = plt.subplots(1, 1, figsize=(8, 2))
+# ax.plot(time_axis, zscore_smooth, color='k', label='Smoothed Z-Score')
