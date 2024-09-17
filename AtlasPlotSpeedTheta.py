@@ -264,7 +264,7 @@ def plot_heatmap_all(dpath,Fs):
     plt.show()
     return -1
 #%%
-dpath='E:/workingfolder/Group D/1819287/speed_files/'
+dpath='E:/workingfolder/Group D/1819287/speed_files_2sec/'
 Fs=840
 plot_heatmap_all(dpath,Fs)
 #%%
