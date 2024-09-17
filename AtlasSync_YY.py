@@ -29,14 +29,14 @@ input_format_df = {
     'day_tag': 'Day',
     'key_ignore_time':120,
     'atlas_frame_rate': 840,
-    'bonsai_frame_rate': 24,
+    'bonsai_frame_rate': 16,
     'atlas_recording_time':30,    
-    'before_win': 2,
-    'after_win': 2,
-    'low_pass_filter_frequency': 60,
-    'parent_folder': 'F:/CheeseboardYY/Group D/1819287/',
-    'MouseID': '1819287',
-    'output_folder': 'SingleTrialPlot'
+    'before_win': 0.5,
+    'after_win': 0.5,
+    'low_pass_filter_frequency': 80,
+    'parent_folder': 'E:/workingfolder/Group D/1769568/',
+    'MouseID': '1769568',
+    'output_folder': 'SingleTrailPlot'
     }
 
 pfw = None
@@ -248,6 +248,8 @@ class cold_file:
     def __init__ (self,cold_folder,bonsai_folder,atlas_folder,input_format_df,day):
         self.day = day
         for filename in os.listdir(cold_folder):
+            if not filename.endswith('.xlsx'):
+                continue
             cold_day = int(re.findall(r'\d+', filename.split(input_format_df['day_tag'])[1])[0])
             if cold_day == self.day:
                 self.df = pd.read_excel(os.path.join(cold_folder,filename))
@@ -373,6 +375,8 @@ def LowPassFilter (x,input_format_df):
     
 def ObtainPreferredWell (cold_folder):
     for cold_filename in os.listdir(cold_folder):
+        if not cold_filename.endswith('.xlsx'):
+            continue
         cold = pd.read_excel(os.path.join(cold_folder,cold_filename))
         w1 = 0
         w2 = 0

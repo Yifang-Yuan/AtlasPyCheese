@@ -29,12 +29,12 @@ input_format_df = {
     'day_tag': 'Day',
     'key_ignore_time':120,
     'atlas_frame_rate': 840,
-    'bonsai_frame_rate': 24,
+    'bonsai_frame_rate': 16,
     'atlas_recording_time':30,    
-    'before_win': 0.5,
-    'after_win': 0.5,
+    'before_win':4 ,
+    'after_win': 4,
     'low_pass_filter_frequency': 80,
-    'parent_folder': 'E:/Mingshuai/workingfolder/Group D/1819287/',
+    'parent_folder': 'E:/workingfolder/Group D/1819287/',
     'MouseID': '1819287',
     'output_folder': 'SingleTrailPlot'
     }
@@ -102,8 +102,8 @@ class key_trail:
         raw_green = []
         fil_green = []
         speed = []
-        bonsai_start_frame = int(start_frame/input_format_df['atlas_frame_rate']*input_format_df['bonsai_frame_rate'])
-        bonsai_end_frame = int(end_frame/input_format_df['atlas_frame_rate']*input_format_df['bonsai_frame_rate'])
+        bonsai_start_frame = int(round(start_frame/input_format_df['atlas_frame_rate']*input_format_df['bonsai_frame_rate']))
+        bonsai_end_frame = int(round(end_frame/input_format_df['atlas_frame_rate']*input_format_df['bonsai_frame_rate']))
         self.filtered_green = LowPassFilter(self.green, input_format_df)
         if (self.sync.shape[0]<self.startframe_sync+int(input_format_df['atlas_recording_time']*input_format_df['bonsai_frame_rate'])-1):
             print('Bonsai recording does not fully cover atlas recording:')
@@ -117,13 +117,13 @@ class key_trail:
                 x = self.track['X'][i+self.startframe_sync+1]-self.track['X'][i+self.startframe_sync]
                 y = self.track['Y'][i+self.startframe_sync+1]-self.track['Y'][i+self.startframe_sync]
             v = np.sqrt(pow(x,2)+pow(y,2))
-            for j in range (0,int(input_format_df['atlas_frame_rate']/input_format_df['bonsai_frame_rate'])):
+            for j in range (int(i/input_format_df['bonsai_frame_rate']*input_format_df['atlas_frame_rate']),int(i/input_format_df['bonsai_frame_rate']*input_format_df['atlas_frame_rate']+input_format_df['atlas_frame_rate']/input_format_df['bonsai_frame_rate'])):
                 atlas_frame = int(i/input_format_df['bonsai_frame_rate']*input_format_df['atlas_frame_rate']+j)
                 speed.append(v)
-                raw_atlas.append(self.atlas[0][atlas_frame])
-                fil_atlas.append(self.filtered_atlas[atlas_frame][0])
-                raw_green.append(self.atlas[0][atlas_frame])
-                fil_green.append(self.filtered_green[atlas_frame][0])
+                raw_atlas.append(self.atlas[0][j])
+                fil_atlas.append(self.filtered_atlas[j][0])
+                raw_green.append(self.atlas[0][j])
+                fil_green.append(self.filtered_green[j][0])
 
         data = {
             'raw_z_score':raw_atlas,
@@ -173,8 +173,8 @@ class key_trail:
            if (pfw_enter_adj<(input_format_df['atlas_recording_time']-input_format_df['after_win'])) and (pfw_enter_adj>input_format_df['before_win']):
                title1 = 'Day'+str(self.day)+'_trail'+str(self.trail_ID)
                fig1, ax = plt.subplots(figsize=(10, 5))
-               before_frame = round((pfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate'])
-               after_frame = round((pfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
+               before_frame = int(round((pfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate']))
+               after_frame = int(round((pfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate']))
                self.cropped_filtered_atlas = self.filtered_atlas[before_frame:after_frame]
                
                ax.plot(time,self.cropped_filtered_atlas,color='purple')
@@ -210,8 +210,8 @@ class key_trail:
            if (lpfw_enter_adj<(input_format_df['atlas_recording_time']-input_format_df['after_win'])) and (lpfw_enter_adj>input_format_df['before_win']):
                title1 = 'Day'+str(self.day)+'_trail'+str(self.trail_ID)
                fig1, ax = plt.subplots(figsize=(10, 5))
-               before_frame = round((lpfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate'])
-               after_frame = round((lpfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate'])
+               before_frame = int(round((lpfw_enter_adj-input_format_df['before_win'])*input_format_df['atlas_frame_rate']))
+               after_frame = int(round((lpfw_enter_adj+input_format_df['after_win'])*input_format_df['atlas_frame_rate']))
                self.cropped_filtered_atlas_lpfw = self.filtered_atlas[before_frame:after_frame]
                ax.plot(np.arange(0,len(self.cropped_filtered_atlas_lpfw))/input_format_df['atlas_frame_rate']-input_format_df['before_win'],self.cropped_filtered_atlas_lpfw,color='green')
                ax.axvline(x=0,color='r', linestyle='--', label='reward collection at less preferred well')
@@ -258,6 +258,8 @@ class cold_file:
     def __init__ (self,cold_folder,bonsai_folder,atlas_folder,input_format_df,day):
         self.day = day
         for filename in os.listdir(cold_folder):
+            if not filename.endswith('.xlsx'):
+                continue
             cold_day = int(re.findall(r'\d+', filename.split(input_format_df['day_tag'])[1])[0])
             if cold_day == self.day:
                 self.df = pd.read_excel(os.path.join(cold_folder,filename))
@@ -411,6 +413,8 @@ def LowPassFilter (x,input_format_df):
     
 def ObtainPreferredWell (cold_folder):
     for cold_filename in os.listdir(cold_folder):
+        if not cold_filename.endswith('.xlsx'):
+            continue
         cold = pd.read_excel(os.path.join(cold_folder,cold_filename))
         w1 = 0
         w2 = 0
