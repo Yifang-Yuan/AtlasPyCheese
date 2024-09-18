@@ -10,14 +10,14 @@ import re
 import numpy as np
 
 parameter = {
-    'split_tag':'cam',
+    'tracking_split_tag':'cam',
     'tracking_file_sufix': '.csv',
     'tracking_file_tag': 'DLC',
-    'well_coord': [[30,240],[250,240]],
-    'detecting_radius': 10,
-    'point_of_no_return': 1,
-    'CamFs':16,
-    'sig_level':0.95
+    'well_coord': [[473,127],[228,91]],
+    'detecting_radius': 20,
+    'point_of_no_return': 0.5,
+    'CamFs':24,
+    'sig_level':0.9
     }
 
 class frame:
@@ -30,16 +30,18 @@ class frame:
         self.r = parameter['detecting_radius']
     
     def IsCloseToWell(self):
-        if Dis(self.well1,self.well2)<=self.r:
+        if Dis(self.well1,self.well2)<=self.r*2:
             print('Error,the two wells are too close!')
             return
         if Dis(self.head,self.well1)<=self.r:
             self.well = self.well1
             self.well_tag = 1
+            # print('Close to well 1')
             return True
         if Dis(self.head,self.well2)<=self.r:
             self.well = self.well2
             self.well_tag = 2
+            # print('Close to well 2')
             return True
         return False
     
@@ -61,25 +63,30 @@ class trace:
             if file.iloc[i,0] == 'coords':
                 self.xy_index = i
         for i in range (file.shape[0]):
+            if not file.iloc[i,0].isdigit():
+                continue
             for j in range (file.shape[1]):
                 if (file.iloc[self.bdp_index,j] == 'head'):
                     if (file.iloc[self.xy_index,j]=='x'):
-                        head_x = file.iloc[i,j]
+                        head_x = float(file.iloc[i,j])
                     if (file.iloc[self.xy_index,j]=='y'):
-                        head_y = file.iloc[i,j] 
+                        head_y = float(file.iloc[i,j])
                 if (file.iloc[self.bdp_index,j] == 'shoulder'):
                     if (file.iloc[self.xy_index,j]=='x'):
-                        shoulder_x = file.iloc[i,j]
+                        shoulder_x = float(file.iloc[i,j])
                     if (file.iloc[self.xy_index,j]=='y'):
-                        shoulder_y = file.iloc[i,j] 
+                        shoulder_y = float(file.iloc[i,j])
                 if (file.iloc[self.bdp_index,j] == 'bottom'):
                     if (file.iloc[self.xy_index,j]=='x'):
-                        bottom_x = file.iloc[i,j]
+                        bottom_x = float(file.iloc[i,j])
                     if (file.iloc[self.xy_index,j]=='y'):
-                        bottom_y = file.iloc[i,j] 
+                        bottom_y = float(file.iloc[i,j])
             single_frame = frame([head_x,head_y],[shoulder_x,shoulder_y],[bottom_x,bottom_y],parameter)
             self.frames.append(single_frame)
+        self.Marking(parameter)
+        print(self.BoarderForce)
         
+            
     def Marking (self,parameter):
         current_state = 'Outside'
         self.BoarderForce = {
@@ -94,8 +101,8 @@ class trace:
             if (frame.IsCloseToWell() and current_state == 'Outside'):
                 if self.BoarderPass(parameter,i,True):
                     current_state = 'Inside'
-                    self.BoarderForce['Leave'].append(i/parameter['CamFs'])
-                    self.BoarderForce['well'].append(frame.well_tag)
+                    self.BoarderForce['Enter'].append(i/parameter['CamFs'])
+                    self.BoarderForce['Well'].append(frame.well_tag)
             if (not (frame.IsCloseToWell()) and current_state == 'Inside'):
                 if self.BoarderPass(parameter,i,False):
                     current_state = 'Outside'
@@ -106,11 +113,12 @@ class trace:
         frame_of_no_return = round(parameter['point_of_no_return']*parameter['CamFs'])
         legit = 0
         outlaw = 0
-        for i in self.frames[index:max(len(self.frame),index+frame_of_no_return)]:
-            if (self.frames[i].IsCloseToWell() == expectation):
+        for i in self.frames[index:min(len(self.frames),index+frame_of_no_return)]:
+            if (i.IsCloseToWell() == expectation):
                 legit+=1
             else:
                 outlaw+=1
+        print(legit,outlaw)
         ratio = legit/(legit+outlaw)
         if ratio >= parameter['sig_level']:
             return True
@@ -121,19 +129,46 @@ class trace:
 class dayx:
     def __init__(self,parameter,folder,day):
         self.day = day
+        self.trails = []
+        output_path = os.path.join(folder,'output')
+        
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
         for filename in os.listdir(folder):
             if filename.endswith(parameter['tracking_file_sufix']) and parameter['tracking_file_tag'] in filename:
                 file_path = os.path.join(folder,filename)
-                ID = int(re.findall(r'\d+', filename.split(parameter['split_tag'])[1])[0])
+                ID = int(re.findall(r'\d+', filename.split(parameter['tracking_split_tag'])[1])[0])
                 file = pd.read_csv(file_path)
                 print(ID,day)
                 t = trace(file,ID,self.day,parameter)
-                
+                df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in t.BoarderForce.items()]))
+                df.to_csv(os.path.join(output_path,'Day'+str(day)+'-'+str(ID)+'_tracking.csv'))
+                self.trails.append(t)   
+
+class mice:
+    def __init__(self,parameter,parent_folder,mouse_ID):
+        self.mice_days = []
+        for filename in os.listdir(parent_folder):
+            if 'day' in filename:
+                day = int(re.findall(r'\d+', filename.split('day')[1])[0])
+                folder = os.path.join(parent_folder,filename)
+            elif 'Day' in filename:
+                day = int(re.findall(r'\d+', filename.split('Day')[1])[0])
+                folder = os.path.join(parent_folder,filename)
+            elif 'Probe' in filename or 'probe' in filename:
+                day = -1
+                folder = os.path.join(parent_folder,filename)
+            else:
+                continue
+            self.mice_days.append(dayx(parameter,folder,day))
+          
+
+
 def Dis (x,y):
     return np.sqrt((y[0]-x[0])**2+(y[1]-x[1])**2)
      
 folder = '//cmvm.datastore.ed.ac.uk/cmvm/sbms/users/s2764793/Win7/Desktop/DLC/'
-a = dayx(parameter,folder,1)
+a = mice(parameter,folder,1054)
 
                 
                 
