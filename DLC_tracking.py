@@ -8,6 +8,7 @@ import os
 import pandas as pd
 import re
 import numpy as np
+import math
 
 parameter = {
     'tracking_split_tag':'cam',
@@ -28,6 +29,8 @@ class frame:
         self.well1 = parameter['well_coord'][0]
         self.well2 = parameter['well_coord'][1]
         self.r = parameter['detecting_radius']
+        self.ang = math.degrees(Ang(self.shoulder,self.head))
+        print(self.ang)
     
     def IsCloseToWell(self):
         if Dis(self.well1,self.well2)<=self.r*2:
@@ -84,6 +87,7 @@ class trace:
             single_frame = frame([head_x,head_y],[shoulder_x,shoulder_y],[bottom_x,bottom_y],parameter)
             self.frames.append(single_frame)
         self.Marking(parameter)
+        self.SaveFile()
         print(self.BoarderForce)
         
             
@@ -99,17 +103,17 @@ class trace:
             frame = self.frames[i]
             #This refers that the mouse may trying to reach the well
             if (frame.IsCloseToWell() and current_state == 'Outside'):
-                if self.BoarderPass(parameter,i,True):
+                if self.BoarderPass(i,True):
                     current_state = 'Inside'
                     self.BoarderForce['Enter'].append(i/parameter['CamFs'])
                     self.BoarderForce['Well'].append(frame.well_tag)
             if (not (frame.IsCloseToWell()) and current_state == 'Inside'):
-                if self.BoarderPass(parameter,i,False):
+                if self.BoarderPass(i,False):
                     current_state = 'Outside'
                     self.BoarderForce['Leave'].append(i/parameter['CamFs'])
                     
     
-    def BoarderPass (self,parameter,index,expectation):
+    def BoarderPass (self,index,expectation):
         frame_of_no_return = round(parameter['point_of_no_return']*parameter['CamFs'])
         legit = 0
         outlaw = 0
@@ -125,13 +129,32 @@ class trace:
         else:
             return False
         
+    def SaveFile (self):
+        data = {
+            'head_x':[],
+            'head_y':[],
+            'shoulder_x':[],
+            'shoulder_y':[],
+            'bottom_x':[],
+            'bottom_y':[],
+            'angle':[]
+            }
+        for i in self.frames:
+            data['head_x'].append(i.head[0])
+            data['head_y'].append(i.head[1])
+            data['shoulder_x'].append(i.shoulder[0])
+            data['shoulder_y'].append(i.shoulder[1])
+            data['bottom_x'].append(i.bottom[0])
+            data['bottom_y'].append(i.bottom[1])
+            data['angle'].append(i.ang)
+        self.df = pd.DataFrame(data)
+        
         
 class dayx:
-    def __init__(self,parameter,folder,day):
+    def __init__(self,parameter,folder,day,op_path):
         self.day = day
         self.trails = []
-        output_path = os.path.join(folder,'output')
-        
+        output_path = os.path.join(op_path,'Day'+str(day))
         if not os.path.exists(output_path):
             os.makedirs(output_path)
         for filename in os.listdir(folder):
@@ -142,12 +165,19 @@ class dayx:
                 print(ID,day)
                 t = trace(file,ID,self.day,parameter)
                 df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in t.BoarderForce.items()]))
+                print(output_path)
                 df.to_csv(os.path.join(output_path,'Day'+str(day)+'-'+str(ID)+'_tracking.csv'))
+                t.df.to_csv(os.path.join(output_path,'Day'+str(day)+'-'+str(ID)+'_frames.csv'))
                 self.trails.append(t)   
 
 class mice:
     def __init__(self,parameter,parent_folder,mouse_ID):
         self.mice_days = []
+        output_path = os.path.join(parent_folder,'output')
+        output_path = os.path.join(output_path,mouse_ID)
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+        
         for filename in os.listdir(parent_folder):
             if 'day' in filename:
                 day = int(re.findall(r'\d+', filename.split('day')[1])[0])
@@ -160,15 +190,18 @@ class mice:
                 folder = os.path.join(parent_folder,filename)
             else:
                 continue
-            self.mice_days.append(dayx(parameter,folder,day))
+            self.mice_days.append(dayx(parameter,folder,day,output_path))
           
 
 
 def Dis (x,y):
     return np.sqrt((y[0]-x[0])**2+(y[1]-x[1])**2)
+
+def Ang (x,y):
+    return math.atan2((y[1]-x[1]),(y[0]-x[0]))
      
-folder = '//cmvm.datastore.ed.ac.uk/cmvm/sbms/users/s2764793/Win7/Desktop/DLC/'
-a = mice(parameter,folder,1054)
+folder = '//cmvm.datastore.ed.ac.uk/cmvm/sbms/users/s2764793/Win7/Desktop/DLC/1054/'
+a = mice(parameter,folder,'1054')
 
                 
                 
