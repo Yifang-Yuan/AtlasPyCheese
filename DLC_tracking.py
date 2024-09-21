@@ -9,17 +9,18 @@ import pandas as pd
 import re
 import numpy as np
 import math
+import matplotlib.pyplot as plt
 
 parameter = {
     'tracking_split_tag':'cam',
     'tracking_file_sufix': '.csv',
     'tracking_file_tag': 'DLC',
-    'well_coord': [[298,205],[292,71]],
+    'well_coord': [[498,211],[292,71]],
     'bridge_coord': [[37,216],[258,106]],
-    'detecting_radius': 20,
-    'point_of_no_return': 0.5,
+    'detecting_radius': 15,
+    'point_of_no_return': 3,
     'CamFs':24,
-    'sig_level':0.9
+    'sig_level':0.95
     }
 
 class frame:
@@ -96,10 +97,25 @@ class trace:
                         bottom_y = float(file.iloc[i,j])
             single_frame = frame([head_x,head_y],[shoulder_x,shoulder_y],[bottom_x,bottom_y])
             self.frames.append(single_frame)
+        # x_values = [frame.shoulder[0] for frame in self.frames]
+        # y_values = [frame.shoulder[1] for frame in self.frames]
+        
         self.Marking()
+        plt.legend(loc='upper left')
+        # Invert the axes to place (0, 0) in the upper-right corner
+        plt.gca().invert_yaxis()  # Invert the y-axis (top to bottom)
+        circle1 = plt.Circle(parameter['well_coord'][0], parameter['detecting_radius'], color='b', fill=True)
+        circle2 = plt.Circle(parameter['well_coord'][1], parameter['detecting_radius'], color='b', fill=True)
+        # Add the circles to the current plot
+        plt.gca().add_patch(circle1)
+        plt.gca().add_patch(circle2)
+        # Equal scaling for both axes
+        plt.gca().set_aspect('equal')
+        plt.show()
         self.SaveFile()
             
     def Marking (self,):
+        frame_stamp = 0
         current_state = 'Outside'
         self.Bridge_detection = 'off'
         self.enter_CB = None
@@ -108,7 +124,6 @@ class trace:
             'Leave':[],
             'Well':[]
             }
-        
         for i in range (len(self.frames)):
             frame = self.frames[i]
             #This refers that the mouse may trying to reach the well
@@ -117,13 +132,32 @@ class trace:
                     current_state = 'Inside'
                     self.BoarderForce['Enter'].append(i/parameter['CamFs'])
                     self.BoarderForce['Well'].append(frame.well_tag)
+                    x,y = self.ObtainShoulderCoord(frame_stamp,i)
+                    t1 = round(frame_stamp/parameter['CamFs'])
+                    t2 = round(i/parameter['CamFs'])
+                    lab = 'From'+str(t1)+'To'+str(t2)+'(s)'
+                    plt.plot(x,y,label = lab)
+                    frame_stamp = i
             if (not (frame.IsCloseToWell()) and current_state == 'Inside'):
                 if self.BoarderPass(i,False):
                     current_state = 'Outside'
                     self.BoarderForce['Leave'].append(i/parameter['CamFs'])
+                    x,y = self.ObtainShoulderCoord(frame_stamp,i)
+                    t1 = round(frame_stamp/parameter['CamFs'])
+                    t2 = round(i/parameter['CamFs'])
+                    lab = 'From'+str(t1)+'To'+str(t2)+'(s)'
+                    # plt.plot(x,y,label = lab)
+                    frame_stamp = i
             if (self.Bridge_detection == 'off' and frame.IsOnBridge()):
                 self.Bridge_detection = 'on'
                 self.enter_CB = i/parameter['CamFs']
+        x,y = self.ObtainShoulderCoord(frame_stamp,len(self.frames))
+        print(len(x),len(y))
+        t1 = round(frame_stamp/parameter['CamFs'])
+        t2 = round(i/parameter['CamFs'])
+        lab = 'From'+str(t1)+'To'+str(t2)+'(s)'
+        plt.plot(x,y,label = lab)
+        frame_stamp = i
     
     def BoarderPass (self,index,expectation):
         
@@ -141,21 +175,11 @@ class trace:
             return True
         else:
             return False
-        
-    def BridgePass (self,index,expectation):
-        frame_of_no_return = round(parameter['point_of_no_return']*parameter['CamFs'])
-        legit = 0
-        outlaw = 0
-        for i in self.frames[index:max(len(self.frames),index+frame_of_no_return)]:
-            if (i.IsOnBridge() == expectation):
-                legit+=1
-            else:
-                outlaw+=1
-        ratio = legit/(legit+outlaw)
-        if ratio >= parameter['sig_level']:
-            return True
-        else:
-            return False               
+    
+    def ObtainShoulderCoord(self,f1,f2):
+        x_values = [frame.shoulder[0] for frame in self.frames[f1:f2]]
+        y_values = [frame.shoulder[1] for frame in self.frames[f1:f2]]
+        return x_values,y_values        
         
     def SaveFile (self):
         data = {
