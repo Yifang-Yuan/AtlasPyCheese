@@ -10,18 +10,24 @@ import re
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
+from matplotlib.patches import Rectangle
 
 parameter = {
     'tracking_split_tag':'cam',
     'tracking_file_sufix': '.csv',
     'tracking_file_tag': 'DLC',
     'well_coord': [[498,211],[292,71]],
-    'bridge_coord': [[37,216],[258,106]],
+    'bridge_coord': [[37,216],[100,258]],
+    'CB_centre': [308,224],
+    'CB_radius': 209,
     'detecting_radius': 15,
     'point_of_no_return': 3,
-    'CamFs':24,
-    'sig_level':0.95
+    'CamFs':30,
+    'sig_level':0.9
     }
+
+parent_folder = None
 
 class frame:
     def __init__(self,head,shoulder,bottom):
@@ -60,17 +66,58 @@ class frame:
         x2 = max(parameter['bridge_coord'][0][0],parameter['bridge_coord'][1][0])
         y1 = min(parameter['bridge_coord'][0][1],parameter['bridge_coord'][1][1])
         y2 = max(parameter['bridge_coord'][0][1],parameter['bridge_coord'][1][1])
+        
+        #This mouse is on bridge if at least two body parts are in the area
+        bodyparts_onbridge = 0
         if (self.head[0]>=x1 and self.head[0]<=x2) and (self.head[1]>=y1 and self.head[1]<=y2):
+            bodyparts_onbridge+=1
+        if (self.shoulder[0]>=x1 and self.shoulder[0]<=x2) and (self.shoulder[1]>=y1 and self.shoulder[1]<=y2):
+            bodyparts_onbridge+=1
+        if (self.bottom[0]>=x1 and self.bottom[0]<=x2) and (self.bottom[1]>=y1 and self.bottom[1]<=y2):
+            bodyparts_onbridge+=1
+        if bodyparts_onbridge>=2:
             return True
-        elif not ((self.bottom[0]>=x1 and self.bottom[0]<=x2) and (self.bottom[1]>=y1 and self.bottom[1]<=y2)):
+        else:
             return False
-
+    
+    #This determined the head direction of mouse (whether it is entering or leaving CB)
+    def BridgeDir(self):
+        if (self.head[0]>=self.shoulder[0]) and (self.shoulder[0]>=self.bottom[0]):
+            #This imply the mouse is heading toward CB (entering)
+            return 1
+        elif (self.head[0]<=self.shoulder[0]) and (self.shoulder[0]<=self.bottom[0]):
+            #This imply the mouse is heading toward SB (leaving)
+            return 2
+        else:
+            return 0
+    
+    # def IsValid(self):
+    def IsInCB (self):
+        bodyparts_CB = 0
+        r = parameter['CB_radius']
+        if Dis(self.head,parameter['CB_centre'])<=r:
+            bodyparts_CB+=1
+        if Dis(self.shoulder,parameter['CB_centre'])<=r:
+            bodyparts_CB+=1
+        if Dis(self.bottom,parameter['CB_centre'])<=r:
+            bodyparts_CB+=1
+        if bodyparts_CB>=2:
+            return True
+        else:
+            return False
+        
+    
 class trace:
     def __init__(self,file,ID,day):
         self.file = file
         self.ID = ID
         self.day = day
         self.frames = []
+        self.BoarderForce = {
+            'Time':[],
+            'Event':[],
+            'Location':[]
+            }
         for i in range (file.shape[0]):
             if file.iloc[i,0] == 'bodyparts':
                 self.bdp_index = i
@@ -97,67 +144,126 @@ class trace:
                         bottom_y = float(file.iloc[i,j])
             single_frame = frame([head_x,head_y],[shoulder_x,shoulder_y],[bottom_x,bottom_y])
             self.frames.append(single_frame)
-        # x_values = [frame.shoulder[0] for frame in self.frames]
-        # y_values = [frame.shoulder[1] for frame in self.frames]
         
         self.Marking()
-        plt.legend(loc='upper left')
-        # Invert the axes to place (0, 0) in the upper-right corner
-        plt.gca().invert_yaxis()  # Invert the y-axis (top to bottom)
-        circle1 = plt.Circle(parameter['well_coord'][0], parameter['detecting_radius'], color='b', fill=True)
+        self.PlotTraceMap(max(self.start_frame,0),min(self.end_frame,len(self.frames)))
+        
+        x = min(parameter['bridge_coord'][0][0],parameter['bridge_coord'][1][0])
+        y = min(parameter['bridge_coord'][0][1],parameter['bridge_coord'][1][1])
+        l = max(parameter['bridge_coord'][0][0],parameter['bridge_coord'][1][0])-x
+        h = max(parameter['bridge_coord'][0][1],parameter['bridge_coord'][1][1])-y
+        square = Rectangle([x,y], l, h, edgecolor='black', facecolor='none', linewidth=1)
+        circle1 = plt.Circle(parameter['well_coord'][0], parameter['detecting_radius'], color='r', fill=True)
         circle2 = plt.Circle(parameter['well_coord'][1], parameter['detecting_radius'], color='b', fill=True)
+        circle3 = plt.Circle(parameter['CB_centre'],parameter['CB_radius'], color='black',fill=False)
         # Add the circles to the current plot
+        plt.gca().add_patch(square)
         plt.gca().add_patch(circle1)
         plt.gca().add_patch(circle2)
-        # Equal scaling for both axes
+        plt.gca().add_patch(circle3)
+        plt.xlim(0, 640)
+        plt.ylim(0, 480)
+        plt.gca().invert_yaxis()
         plt.gca().set_aspect('equal')
-        plt.show()
+        
+        name = str(self.day)+'-'+str(self.ID)+'Tracking_map.png'
+        output_path = os.path.join(output_folder,'Tracking map')
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+        plt.savefig(os.path.join(output_path,name))
+        
         self.SaveFile()
             
     def Marking (self,):
         frame_stamp = 0
         current_state = 'Outside'
-        self.Bridge_detection = 'off'
+        CB = False
+        has_entered_CB_before = False
+        current_well = None
+        self.Bridge_detection = False
         self.enter_CB = None
-        self.BoarderForce = {
-            'Enter':[],
-            'Leave':[],
-            'Well':[]
-            }
+        self.leave_CB = None
+        self.leave_SB = -1
+        self.start_frame = -1
+        self.end_frame = 999999999999
+        
         for i in range (len(self.frames)):
             frame = self.frames[i]
+            if (not CB) and frame.IsInCB() and self.CBSig(i):
+                CB = True
+                if not has_entered_CB_before:
+                    self.start_frame = i
+                has_entered_CB_before = True
+                self.enter_CB = i/parameter['CamFs']
+                self.BoarderForce['Time'].append(i/parameter['CamFs'])
+                self.BoarderForce['Event'].append('Enter CB')
+                self.BoarderForce['Location'].append('-')
+                print('In CB at:'+str(i/parameter['CamFs']))
+            if CB and not frame.IsInCB() and self.CBSig(i):
+                CB = False
+                self.leave_CB = i/parameter['CamFs']
+                self.end_frame = i
+                self.BoarderForce['Time'].append(i/parameter['CamFs'])
+                self.BoarderForce['Event'].append('Leave CB')
+                self.BoarderForce['Location'].append('-')
+                print('Leave CB at:'+str(i/parameter['CamFs']))
             #This refers that the mouse may trying to reach the well
             if (frame.IsCloseToWell() and current_state == 'Outside'):
                 if self.BoarderPass(i,True):
                     current_state = 'Inside'
-                    self.BoarderForce['Enter'].append(i/parameter['CamFs'])
-                    self.BoarderForce['Well'].append(frame.well_tag)
-                    x,y = self.ObtainShoulderCoord(frame_stamp,i)
-                    t1 = round(frame_stamp/parameter['CamFs'])
-                    t2 = round(i/parameter['CamFs'])
-                    lab = 'From'+str(t1)+'To'+str(t2)+'(s)'
-                    plt.plot(x,y,label = lab)
-                    frame_stamp = i
+                    self.BoarderForce['Time'].append(i/parameter['CamFs'])
+                    self.BoarderForce['Event'].append('Approaching Well')
+                    self.BoarderForce['Location'].append('Well'+str(frame.well_tag))
+                    current_well = frame.well_tag
             if (not (frame.IsCloseToWell()) and current_state == 'Inside'):
                 if self.BoarderPass(i,False):
                     current_state = 'Outside'
-                    self.BoarderForce['Leave'].append(i/parameter['CamFs'])
-                    x,y = self.ObtainShoulderCoord(frame_stamp,i)
-                    t1 = round(frame_stamp/parameter['CamFs'])
-                    t2 = round(i/parameter['CamFs'])
-                    lab = 'From'+str(t1)+'To'+str(t2)+'(s)'
-                    # plt.plot(x,y,label = lab)
-                    frame_stamp = i
-            if (self.Bridge_detection == 'off' and frame.IsOnBridge()):
-                self.Bridge_detection = 'on'
-                self.enter_CB = i/parameter['CamFs']
-        x,y = self.ObtainShoulderCoord(frame_stamp,len(self.frames))
-        print(len(x),len(y))
-        t1 = round(frame_stamp/parameter['CamFs'])
-        t2 = round(i/parameter['CamFs'])
-        lab = 'From'+str(t1)+'To'+str(t2)+'(s)'
-        plt.plot(x,y,label = lab)
-        frame_stamp = i
+                    self.BoarderForce['Time'].append(i/parameter['CamFs'])
+                    self.BoarderForce['Event'].append('Leaving Well')
+                    self.BoarderForce['Location'].append('Well'+str(current_well))
+            if (frame.IsOnBridge() and self.BridgeSig(i) and not has_entered_CB_before and self.leave_SB==-1):
+                self.Bridge_detection = True
+                self.leave_SB = i/parameter['CamFs']
+                self.BoarderForce['Time'].append(i/parameter['CamFs'])
+                self.BoarderForce['Event'].append('Leave SB')
+                self.BoarderForce['Location'].append('-')
+                print('Leaving SB at:'+str(i/parameter['CamFs']))
+        
+    def CBSig(self,index):
+        exp = self.frames[index].IsInCB()
+        frame_of_no_return = round(parameter['point_of_no_return']*parameter['CamFs'])
+        legit = 0
+        outlaw = 0
+        for i in self.frames[index:min(len(self.frames),index+frame_of_no_return)]:
+            if (i.IsInCB() == exp):
+                legit+=1
+            else:
+                outlaw+=1
+        ratio = legit/(legit+outlaw)
+        if ratio >= parameter['sig_level']:
+            return True
+        else:
+            return False
+    
+    def BridgeSig (self,index):
+        expectation = self.frames[index].IsOnBridge()
+        #The mouse is identified as on bridge if its remain on the bridge in the following 0.5s
+        frame_of_no_return = round(0.3*parameter['CamFs'])
+        legit = 0
+        outlaw = 0
+        for i in self.frames[index:min(len(self.frames),index+frame_of_no_return)]:
+            if (i.IsOnBridge() == expectation):
+                legit+=1
+            else:
+                outlaw+=1
+        ratio = legit/(legit+outlaw)
+        if ratio >= parameter['sig_level']:
+            
+            return True
+        else:
+            return False
+    
+
     
     def BoarderPass (self,index,expectation):
         
@@ -171,7 +277,6 @@ class trace:
                 outlaw+=1
         ratio = legit/(legit+outlaw)
         if ratio >= parameter['sig_level']:
-            
             return True
         else:
             return False
@@ -206,7 +311,29 @@ class trace:
                 data['speed'].append(data['speed'][-1])
                 
         self.df = pd.DataFrame(data)
+     
+    def PlotTraceMap (self,start_frame,end_frame):
+        x,y = self.ObtainShoulderCoord(start_frame,end_frame)
+        points = np.array([x, y]).T.reshape(-1, 1, 2)
+        segments = np.concatenate([points[:-1], points[1:]], axis=1)
+
+        # Create a LineCollection with a colormap that gradually changes along the line segments
+        lc = LineCollection(segments, cmap='viridis', linewidth=2)
+        lc.set_array(np.linspace(round(start_frame/parameter['CamFs']), round(end_frame/parameter['CamFs']), len(x) - 1))  # Set color based on the index
         
+        fig, ax = plt.subplots()
+        ax.add_collection(lc)
+        ax.autoscale()
+        ax.set_xlim(min(x), max(x))
+        ax.set_ylim(min(y), max(y))
+        
+        cbar = plt.colorbar(lc, ax=ax)
+        cbar.set_label('Time')
+        lc.set_clim(round(start_frame/parameter['CamFs']), round(end_frame/parameter['CamFs']))
+        
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.title('Trace with Gradual Color Change')
         
 class dayx:
     def __init__(self,folder,day,op_path):
@@ -230,8 +357,9 @@ class dayx:
 class mice:
     def __init__(self,parent_folder,mouse_ID):
         self.mice_days = []
-        output_path = os.path.join(parent_folder,'output')
-        output_path = os.path.join(output_path,mouse_ID)
+        output_path = os.path.join(parent_folder,'DLC_output')
+        global output_folder
+        output_folder = output_path
         if not os.path.exists(output_path):
             os.makedirs(output_path)
         print('Now reading:'+str(mouse_ID))
@@ -248,25 +376,23 @@ class mice:
             else:
                 continue
             self.mice_days.append(dayx(folder,day,output_path))
-            self.Neo_Cold(parent_folder)
+            # self.Neo_Cold(parent_folder)
      
     def Neo_Cold(self,folder):
         cold = {
             'Day':[],
             'Trail_ID':[],
-            'Time_of_entry':[]
+            'Time_of_leaving_SB':[]
             }
-        output_path = os.path.join(folder,'Neo_Cold.csv')
-        print(output_path)
+        path = os.path.join(folder,'Neo_Cold.csv')
+        print(path)
         for day in self.mice_days:
             for trail in day.trails:
                 cold['Day'].append(day.day)
                 cold['Trail_ID'].append(trail.ID)
-                cold['Time_of_entry'].append(trail.enter_CB)
+                cold['Time_of_leaving_SB'].append(trail.leave_SB)
         df = pd.DataFrame(cold)
-        df.to_csv(output_path)
-     
-
+        df.to_csv(path)
 
 def Dis (x,y):
     return np.sqrt((y[0]-x[0])**2+(y[1]-x[1])**2)
@@ -274,8 +400,9 @@ def Dis (x,y):
 def Ang (x,y):
     return math.atan2((y[1]-x[1]),(y[0]-x[0]))
      
-folder = '/Users/zhumingshuai/Desktop/Sample Data/1054/'
-a = mice(folder,'1054')
+global output_folder
+folder = 'D:/Photometry/test_tracking/1769565/'
+a = mice(folder,'1769565')
 
                 
                 
