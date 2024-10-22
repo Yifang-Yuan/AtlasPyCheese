@@ -19,12 +19,12 @@ parameter = {
     'tracking_file_sufix': '.csv',
     'tracking_file_tag': 'DLC',
     'DLC_folder_tag': 'DLC_tracking',
-    'well_coord': [[496,214],[296,70]],
+    'well_coord': [[462,211],[314,372]],
     'bridge_coord': [[37,216],[100,258]],
     'CB_centre': [308,224],
     'CB_radius': 209,
     'detecting_radius': 15,
-    'point_of_no_return': 3,
+    'point_of_no_return': 1.5,
     'CamFs':30,
     'sig_level':0.9
     }
@@ -42,20 +42,36 @@ class frame:
         #Not that the origin is at the upper left corner
         self.ang = -math.degrees(Ang(self.shoulder,self.head))
     
+    # def IsCloseToWell(self):
+    #     if Dis(self.well1,self.well2)<=self.r*2:
+    #         print('Error,the two wells are too close!')
+    #         return
+    #     if Dis(self.head,self.well1)<=self.r:
+    #         self.well = self.well1
+    #         self.well_tag = 1
+    #         # print('Close to well 1')
+    #         if self.IsInward():
+    #             return True
+    #     if Dis(self.head,self.well2)<=self.r:
+    #         self.well = self.well2
+    #         self.well_tag = 2
+    #         # print('Close to well 2')
+    #         if self.IsInward():
+    #             return True
+    #     return False
+    
     def IsCloseToWell(self):
-        if Dis(self.well1,self.well2)<=self.r*2:
-            print('Error,the two wells are too close!')
-            return
-        if Dis(self.head,self.well1)<=self.r:
+        if Dis(self.well1, self.well2) <= self.r * 2:
+            print('Error, the two wells are too close!')
+            return False
+        if Dis(self.head, self.well1) <= self.r:
             self.well = self.well1
             self.well_tag = 1
-            # print('Close to well 1')
             if self.IsInward():
                 return True
-        if Dis(self.head,self.well2)<=self.r:
+        if Dis(self.head, self.well2) <= self.r:
             self.well = self.well2
             self.well_tag = 2
-            # print('Close to well 2')
             if self.IsInward():
                 return True
         return False
@@ -150,6 +166,9 @@ class trace:
             single_frame = frame([head_x,head_y],[shoulder_x,shoulder_y],[bottom_x,bottom_y])
             self.frames.append(single_frame)
         
+        # 添加标志变量，跟踪每个水井是否已被访问
+        self.well1_visited = False
+        self.well2_visited = False
         self.Marking()
         self.SaveFile()
         self.PlotTraceMap(max(self.start_frame,0),min(self.end_frame,len(self.frames)))
@@ -179,7 +198,95 @@ class trace:
             os.makedirs(output_path)
         plt.savefig(os.path.join(output_path,name))
         plt.close()
-        
+
+    # def Marking(self):
+    #     frame_stamp = 0
+    #     current_state = 'Outside'
+    #     current_well = None
+    #     CB = False
+    #     has_entered_CB_before = False
+    #     self.Bridge_detection = False
+    #     self.enter_CB = -1
+    #     self.leave_CB = -1
+    #     self.leave_SB = -1
+    #     self.start_frame = -1
+    #     self.end_frame = 999999999999
+    
+    #     # 初始化水井访问标志
+    #     self.well1_visited = False
+    #     self.well2_visited = False
+    
+    #     for i in range(len(self.frames)):
+    #         frame = self.frames[i]
+    
+    #         # 检测老鼠是否进入中央盒子（CB）
+    #         if (not CB) and frame.IsInCB() and self.CBSig(i):
+    #             CB = True
+    #             if not has_entered_CB_before:
+    #                 self.start_frame = i
+    #             has_entered_CB_before = True
+    #             self.enter_CB = i / frame_rate
+    #             self.BoarderForce['Time'].append(i / frame_rate)
+    #             self.BoarderForce['Event'].append('Enter CB')
+    #             self.BoarderForce['Location'].append('-')
+    #             #print('In CB at:' + str(i / frame_rate))
+    
+    #         # 检测老鼠是否离开中央盒子（CB）
+    #         if CB and not frame.IsInCB() and self.CBSig(i):
+    #             CB = False
+    #             self.leave_CB = i / frame_rate
+    #             self.end_frame = i
+    #             self.BoarderForce['Time'].append(i / frame_rate)
+    #             self.BoarderForce['Event'].append('Leave CB')
+    #             self.BoarderForce['Location'].append('-')
+    #             #print('Leave CB at:' + str(i / frame_rate))
+    
+    #         # 检查老鼠是否接近水井
+    #         if frame.IsCloseToWell() and current_state == 'Outside':
+    #             approaching_well_tag = frame.well_tag
+    
+    #             # 检查相应的水井是否已经被访问过
+    #             if (approaching_well_tag == 1 and not self.well1_visited) or \
+    #                (approaching_well_tag == 2 and not self.well2_visited):
+    
+    #                 if self.BoarderPass(i, True):
+    #                     current_state = 'Inside'
+    #                     self.BoarderForce['Time'].append(i / frame_rate)
+    #                     self.BoarderForce['Event'].append('Approaching Well')
+    #                     self.BoarderForce['Location'].append('Well' + str(approaching_well_tag))
+    #                     current_well = approaching_well_tag
+    
+    #                     # 设置水井访问标志为 True
+    #                     if approaching_well_tag == 1:
+    #                         self.well1_visited = True
+    #                     elif approaching_well_tag == 2:
+    #                         self.well2_visited = True
+    #             else:
+    #                 # 如果水井已经被访问过，不更新状态，也不记录事件
+    #                 continue
+    
+    #         # 检查老鼠是否离开水井
+    #         elif not frame.IsCloseToWell() and current_state == 'Inside':
+    #             if self.BoarderPass(i, False):
+    #                 current_state = 'Outside'
+    #                 self.BoarderForce['Time'].append(i / frame_rate)
+    #                 self.BoarderForce['Event'].append('Leaving Well')
+    #                 self.BoarderForce['Location'].append('Well' + str(current_well))
+    #                 current_well = None
+    
+    #         # 检测老鼠是否离开起始盒子（SB）并上桥
+    #         if frame.IsOnBridge() and self.BridgeSig(i) and not has_entered_CB_before and self.leave_SB == -1:
+    #             self.Bridge_detection = True
+    #             self.leave_SB = i / frame_rate
+    #             self.BoarderForce['Time'].append(i / frame_rate)
+    #             self.BoarderForce['Event'].append('Leave SB')
+    #             self.BoarderForce['Location'].append('-')
+    #             #print('Leaving SB at:' + str(i / frame_rate))
+    
+    #         # 如果老鼠既不在桥上，也不在中央盒子中，则将当前位置设置为上一帧的位置
+    #         if not frame.IsOnBridge() and not self.BridgeSig(i) and not frame.IsInCB():
+    #             self.frames[i] = self.frames[i - 1]
+             ###################################################################################################   
     def Marking (self,):
         frame_stamp = 0
         current_state = 'Outside'
@@ -367,17 +474,36 @@ class dayx:
         output_path = os.path.join(op_path,'Day'+str(day))
         if not os.path.exists(output_path):
             os.makedirs(output_path)
+        # for filename in os.listdir(folder):
+        #     if filename.endswith(parameter['tracking_file_sufix']) and parameter['tracking_file_tag'] in filename:
+        #         file_path = os.path.join(folder,filename)
+        #         print(filename)
+        #         print(filename.split(parameter['tracking_split_tag']))
+        #         ID = int(re.findall(r'\d+', filename.split(parameter['tracking_split_tag'])[1])[0])
+        #         file = pd.read_csv(file_path)
+        #         print('Day'+str(self.day)+' Trial'+str(ID))
+        #         t = trace(file,ID,self.day)
+        #         df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in t.BoarderForce.items()]))
+        #         df.to_csv(os.path.join(output_path,'Day'+str(day)+'-'+str(ID)+'_tracking.csv'))
+        #         t.df.to_csv(os.path.join(output_path,'Day'+str(day)+'-'+str(ID)+'_frames.csv'))
+        #         self.trails.append(t)  
         for filename in os.listdir(folder):
             if filename.endswith(parameter['tracking_file_sufix']) and parameter['tracking_file_tag'] in filename:
-                file_path = os.path.join(folder,filename)
-                ID = int(re.findall(r'\d+', filename.split(parameter['tracking_split_tag'])[1])[0])
+                file_path = os.path.join(folder, filename)
+                print(filename)
+        
+                # 编译正则表达式模式
+                pattern = re.compile(re.escape(parameter['tracking_split_tag']), re.IGNORECASE)
+                parts = pattern.split(filename)
+                ID = int(re.findall(r'\d+', parts[1])[0])
+        
                 file = pd.read_csv(file_path)
-                print('Day'+str(self.day)+' Trial'+str(ID))
-                t = trace(file,ID,self.day)
-                df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in t.BoarderForce.items()]))
-                df.to_csv(os.path.join(output_path,'Day'+str(day)+'-'+str(ID)+'_tracking.csv'))
-                t.df.to_csv(os.path.join(output_path,'Day'+str(day)+'-'+str(ID)+'_frames.csv'))
-                self.trails.append(t)  
+                print('Day' + str(self.day) + ' Trial' + str(ID))
+                t = trace(file, ID, self.day)
+                df = pd.DataFrame({k: pd.Series(v) for k, v in t.BoarderForce.items()})
+                df.to_csv(os.path.join(output_path, f'Day{day}-{ID}_tracking.csv'))
+                t.df.to_csv(os.path.join(output_path, f'Day{day}-{ID}_frames.csv'))
+                self.trails.append(t)
 
 class mice:
     def __init__(self,parent_folder,mouse_ID):
@@ -442,7 +568,7 @@ def ObtainFrameRate(parent_folder):
                     frame_rate = df.shape[0] / duration
                     
 global output_folder
-folder = 'D:/Photometry/test_tracking/1786534/'
+folder = 'D:/workingfolder/Group E-cued/1786534/'
 ObtainFrameRate(folder)
 print('Frame is:'+str(frame_rate))
 a = mice(folder,'1786534')
