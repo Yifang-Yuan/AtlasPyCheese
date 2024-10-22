@@ -19,7 +19,7 @@ parameter = {
     'tracking_file_sufix': '.csv',
     'tracking_file_tag': 'DLC',
     'DLC_folder_tag': 'DLC_tracking',
-    'well_coord': [[462,211],[314,372]],
+    'well_coord': [[496,214],[296,70]],
     'bridge_coord': [[37,216],[100,258]],
     'CB_centre': [308,224],
     'CB_radius': 209,
@@ -568,10 +568,10 @@ def ObtainFrameRate(parent_folder):
                     frame_rate = df.shape[0] / duration
                     
 global output_folder
-folder = 'D:/workingfolder/Group E-cued/1786534/'
+folder = 'D:/workingfolder/Group E-cued/1756072/'
 ObtainFrameRate(folder)
 print('Frame is:'+str(frame_rate))
-a = mice(folder,'1786534')
+a = mice(folder,'1756072')
 
                 
                 
